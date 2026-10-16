@@ -1,0 +1,53 @@
+{# The always-there look switch (Karen, 2026-08-10) — Outlook's "New Outlook"
+   toggle, ours. Sits in the top-right of BOTH chromes, so either look is one
+   flick away. Karen's words: the redesign is "Classy"; the classic look, the
+   one the themes paint, is "Colorful". The label stays constant (like
+   Outlook's) — the switch position says which look you're on.
+
+   State comes from ui_skin — the person's SAVED pick, injected app-wide by
+   routes_newlook.register — not from which template happens to be rendering:
+   a Classy person on a not-yet-rebuilt page sees this classic chrome with the
+   switch still ON, and flicking it is what turns it off. No JavaScript — the
+   button submits the form, like every /account/skin form before it. #}
+{% if session.get('user') %}
+<form method="POST" action="/account/skin" class="skin-flip">
+  {# The token is baked in (not left to the chrome JS, which skips forms that
+     already carry one) so the switch also works on standalone pages with no
+     chrome at all — Karen's /home landing, where it was missing entirely and
+     "always visible" wasn't true (Karen, 2026-08-11). #}
+  <input type="hidden" name="csrf_token" value="{{ session.csrf }}">
+  <input type="hidden" name="skin" value="{{ 'classic' if ui_skin == 'new' else 'new' }}">
+  <button type="submit" role="switch" aria-checked="{{ 'true' if ui_skin == 'new' else 'false' }}"
+          data-kk="skin-switch" class="{{ 'on' if ui_skin == 'new' else '' }}"
+          title="{{ 'Switch back to the Colorful look — nothing else changes' if ui_skin == 'new'
+                    else 'Try the Classy look — the calm redesign. Flick back any time.' }}">
+    <span class="skin-word">Classy</span>
+    <span class="skin-track"><span class="skin-knob"></span></span>
+  </button>
+</form>
+<style>
+  .skin-flip{display:inline-flex;margin:0;align-self:center;}
+  .skin-flip button{display:inline-flex;align-items:center;gap:7px;background:none;border:none;
+    cursor:pointer;font:inherit;font-size:.8rem;padding:4px 7px;border-radius:6px;transition:background .15s;}
+  .skin-flip .skin-track{position:relative;width:30px;height:16px;border-radius:8px;flex:none;
+    background:rgba(120,120,120,.45);transition:background .15s;}
+  .skin-flip .skin-knob{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:left .15s;}
+  .skin-flip button.on .skin-knob{left:16px;}
+  .skin-flip button.on .skin-track{background:#43A047;}
+  /* dress for the classic navy nav. OFF must read as UNLIT on a dark bar —
+     a light track here looks switched-on (Karen, 2026-08-10 "the toggle is
+     backwards"), so off = dark inset track with a faint outline, on = green. */
+  nav .skin-flip{margin-left:16px;}
+  nav .skin-flip button{color:rgba(255,255,255,.85);}
+  nav .skin-flip button:hover{background:rgba(255,255,255,.15);color:#fff;}
+  nav .skin-flip .skin-track{background:rgba(0,0,0,.38);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3);}
+  nav .skin-flip button.on .skin-track{background:#43A047;box-shadow:none;}
+  /* dress for the new look's paper topbar (light, like Outlook's own bar:
+     dim gray track = off, accent track = on) */
+  .topbar .skin-flip button{color:var(--ink-soft);}
+  .topbar .skin-flip button:hover{background:rgba(0,0,0,.05);color:var(--ink);}
+  .topbar .skin-flip .skin-track{background:#c9c4bb;}
+  .topbar .skin-flip button.on .skin-track{background:var(--accent);}
+</style>
+{% endif %}

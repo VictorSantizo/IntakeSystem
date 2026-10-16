@@ -1,0 +1,133 @@
+{% extends "new/base.html" %}
+{% block content %}
+{# The new-look ("Classy") Files page — the nightly one-page conversion,
+   2026-08-11. Same data, same controls, same element ids and data-kk hooks as
+   the classic templates/files.html; only the dress changes. In particular the
+   two Copy path buttons keep #copy-path-btn / .js-copy-file and their
+   data-copy-path attributes, and #open-explorer-btn and #unc-footer keep
+   their ids — the page's own script and the shared chrome listener find the
+   page by those, in BOTH looks (report #22). newlook.css has no form styling,
+   so the search input carries the same quiet inline style new/mail.html uses. #}
+<div class="eyebrow">Files &middot; the cabinet as it really is</div>
+<h1>{% if here %}{{ crumbs[-1].name if crumbs else 'Files' }}{% else %}Every drawer in the cabinet.{% endif %}</h1>
+<p class="sub">The folders staff have filed into for 13 years, read straight off
+the file server, with what Klick Klack knows about each document beside it.
+Browsing only &mdash; nothing here moves, renames, or deletes a file.</p>
+
+{% set inp = "border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;font:inherit;color:var(--ink);" %}
+
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+  <nav style="font-size:.9rem;flex:1;min-width:240px;color:var(--ink-soft);" aria-label="Folder path">
+    <a href="/files" style="color:var(--accent);">Files</a>
+    {% for c in crumbs %} <span style="color:var(--line);">&rsaquo;</span>
+    {% if loop.last %}<b style="color:var(--ink);">{{ c.name }}</b>
+    {% else %}<a href="/files?p={{ c.path|urlencode }}" style="color:var(--accent);">{{ c.name }}</a>{% endif %}
+    {% endfor %}
+  </nav>
+  {% if here %}
+  <form method="GET" style="display:flex;gap:8px;">
+    <input type="hidden" name="p" value="{{ here }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search this folder&hellip;" style="{{ inp }}width:220px;">
+    <button type="submit" class="linklike" style="color:var(--accent);font-weight:600;">Search</button>
+    {% if q %}<a href="/files?p={{ here|urlencode }}" class="linklike" style="text-decoration:none;color:var(--ink-soft);">Clear</a>{% endif %}
+  </form>
+  <span style="display:flex;gap:8px;">
+    <button type="button" class="linklike" id="copy-path-btn" data-copy-path="{{ here_unc }}"
+            style="color:var(--accent);font-weight:600;"
+            title="Copy this folder's path (as every desk sees it)">Copy path</button>
+    <button type="button" class="linklike" id="open-explorer-btn" style="display:none;color:var(--accent);font-weight:600;"
+            title="Open this folder in File Explorer on your desk">Open in Explorer</button>
+  </span>
+  {% endif %}
+</div>
+
+{% if not q and dirs %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-bottom:20px;">
+  {% for d in dirs %}
+  <a href="/files?p={{ d.path|urlencode }}"
+     style="display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;
+            color:var(--ink);background:var(--cream);border:1px solid var(--line);border-radius:8px;">
+    <span aria-hidden="true">&#128193;</span>
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ d.name }}">{{ d.name }}</span>
+    {% if d.count is not none %}<span style="font-size:.8rem;color:var(--ink-soft);">{{ d.count }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if at_roots %}
+  {% if not dirs %}
+  <div class="all-clear" style="margin-top:26px;">
+    <div class="big">No browse roots are configured.</div>
+    <div class="why">Check <b>archive_folder</b> in Settings.</div>
+  </div>
+  {% endif %}
+{% elif here %}
+<div class="panel" style="margin-top:6px;">
+  <div class="section-label">
+    {% if q %}{{ files|length }} match{{ 'es' if files|length != 1 else '' }} for &ldquo;{{ q }}&rdquo; under this folder{% if truncated %} &middot; first {{ files|length }} shown, narrow the search for the rest{% endif %}
+    {% else %}{{ files|length }} file{{ 's' if files|length != 1 else '' }}{% if more %} &middot; and {{ more }} more not shown (this folder is huge &mdash; use search){% endif %}{% endif %}
+  </div>
+  {# The new look states things in words, not filled pills (newlook.css has no
+     .badge-status) — the status rides the quiet .t tag idiom instead. #}
+  {% set sc = {'Pending':'legal','In Progress':'email','Processed':'plain',
+               'Paid':'plain','Filed':'plain','On Hold':'legal'} %}
+  <table class="quiet">
+    <tr><th>Name</th><th>Modified</th><th>Size</th><th>Klick Klack record</th><th></th></tr>
+    {% for f in files %}
+    <tr>
+      <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ f.name }}">
+        {% if f.is_pdf %}<a href="/files/open?p={{ f.path|urlencode }}" target="_blank" rel="noopener" style="color:var(--accent);">{{ f.name }}</a>
+        {% else %}{{ f.name }}{% endif %}
+      </td>
+      <td style="white-space:nowrap;color:var(--ink-soft);font-size:.85rem;">{{ f.mtime }}</td>
+      <td style="white-space:nowrap;color:var(--ink-soft);font-size:.85rem;">{{ f.size }}</td>
+      <td style="white-space:nowrap;">
+        {% if f.chip %}
+          {% if f.chip.kind == 'copy' %}
+            <a class="recno" href="/entry/{{ f.chip.id }}/view">copy of {{ f.chip.record_no or '#' ~ f.chip.id }}</a>
+          {% else %}
+            <a class="recno" href="/entry/{{ f.chip.id }}/view">{{ f.chip.record_no or '#' ~ f.chip.id }}</a>
+            <span class="t {{ sc.get(f.chip.status, 'plain') }}" style="min-width:0;">{{ f.chip.status }}</span>
+            <span style="font-size:.8rem;color:var(--ink-soft);">{{ f.chip.doc_type }}{% if f.chip.amount %} &middot; ${{ "{:,.2f}".format(f.chip.amount) }}{% endif %}</span>
+          {% endif %}
+        {% else %}<span style="font-size:.8rem;color:var(--ink-soft);">on disk only</span>{% endif %}
+      </td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="linklike js-copy-file" data-copy-path="{{ f.path|unc }}"
+                style="color:var(--accent);" title="Copy this file's path">Copy path</button></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:30px;">
+      {% if q %}Nothing matches.{% else %}No files at this level &mdash; open a subfolder above.{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if here %}
+<p style="margin-top:12px;font-size:.8rem;color:var(--ink-soft);" id="unc-footer" data-unc="{{ here_unc }}">{{ here_unc }}</p>
+{% endif %}
+
+<script>
+(function(){
+  // Copy path (both buttons) is the shared data-copy-path listener in
+  // _chrome_page_js.html — included by both chromes, so nothing to do here.
+  var uncEl = document.getElementById('unc-footer');
+  var unc = uncEl ? uncEl.dataset.unc : '';
+  var openBtn = document.getElementById('open-explorer-btn');
+  if (openBtn) {
+    fetch('/api/desk/status').then(function(r){ return r.json(); }).then(function(s){
+      if (s && s.commands) {
+        openBtn.style.display = '';
+        openBtn.addEventListener('click', function(){
+          fetch('/api/desk/open_explorer', {method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({path: unc})});
+        });
+      }
+    }).catch(function(){});
+  }
+})();
+</script>
+{% endblock %}

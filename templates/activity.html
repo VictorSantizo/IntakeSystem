@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1>Activity Log</h1>
+  <a href="/" class="btn btn-ghost btn-sm">&larr; Dashboard</a>
+</div>
+<p class="subtitle">Recent changes &mdash; who did what, and when</p>
+
+<div class="card"><div class="card-body" style="padding:0;">
+  <div style="padding:12px 20px;background:var(--gray);border-bottom:1px solid #ddd;font-size:.85rem;color:var(--mid);">{{ activity|length }} most recent event{{ 's' if activity|length != 1 else '' }}</div>
+  {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>When</th><th>Who</th><th>Activity</th><th>Record</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for a in activity %}<tr {% if a.entry_id %}style="cursor:pointer;" onclick="window.location.href='/entry/{{ a.entry_id }}/view'" title="Open record"{% endif %}>
+      <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ a.created_at }}</td>
+      <td style="font-size:.85rem;">{{ a.user or ('&mdash;'|safe) }}</td>
+      <td style="font-size:.85rem;"><strong>{{ a.action }}</strong>{% if a.detail %} <span style="color:var(--mid);">&middot; {{ a.detail }}</span>{% endif %}</td>
+      <td>{{ a.vendor or a.entity_code or ('#' ~ a.entry_id if a.entry_id else ('&mdash;'|safe)) }}{% if a.doc_type %} <span style="color:var(--mid);font-size:.8rem;">({{ a.doc_type }})</span>{% endif %}</td>
+      <td>{% if a.status %}<span class="badge-status {{ sc.get(a.status,'s-pending') }}">{{ a.status }}</span>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="5" style="text-align:center;padding:40px;color:#999;">No activity recorded yet.</td></tr>{% endfor %}
+    </tbody></table></div></div></div>
+{% endblock %}

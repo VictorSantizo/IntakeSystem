@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1>&#128231; Mail</h1>
+    <p class="subtitle">Every email from every office mailbox &mdash; search it, filter it, print it with its attachment list</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    {% if syncing %}
+    <span class="btn btn-ghost" style="cursor:default;" title="Reading the mailboxes now — mail is never marked read">&#8987; Syncing mailboxes&hellip;</span>
+    {% else %}
+    <form method="POST" action="/mail/sync" style="margin:0;">
+      <button type="submit" class="btn btn-ghost" data-kk="mail-sync"
+              title="Pull anything new from all mailboxes into this archive. Read-only: nothing is ever marked read, moved, or deleted.">&#8635; Sync mailboxes</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{# The search box and the filter bar carry EACH OTHER's state as hidden fields
+   (the /bills report-#93 lesson, both directions this time): search then
+   filter, or filter then search — the result is the same narrowed list. #}
+<form method="GET" action="/mail" role="search" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <input type="search" name="q" value="{{ q or '' }}"
+         placeholder="Search all mail — sender, subject, message text, attachment filename…"
+         style="flex:1;min-width:280px;">
+  {% for k, v in filters.items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+  <button type="submit" class="btn btn-primary">&#128269; Search</button>
+  {% if q %}<a href="/mail{% if filters_on %}?{% for k,v in filters_on.items() %}{{ k }}={{ v|urlencode }}{{ '&' if not loop.last }}{% endfor %}{% endif %}" class="btn btn-ghost">Clear</a>{% endif %}
+</form>
+
+<form method="GET" action="/mail" class="filter-bar">
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <div class="form-group"><label>Mailbox</label><select name="account"><option value="">All mailboxes</option>{% for a in accounts %}<option value="{{ a }}" {{ 'selected' if filters.account==a else '' }}>{{ a }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Document type</label><select name="doc_type"><option value="">Any type</option>{% for dt in doc_types %}<option value="{{ dt }}" {{ 'selected' if filters.doc_type==dt else '' }}>{{ dt }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Received from</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+  <div class="form-group"><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+  <div class="form-group"><label>Attachments</label><select name="has_att"><option value="">Either way</option><option value="yes" {{ 'selected' if filters.has_att=='yes' else '' }}>With attachments</option><option value="no" {{ 'selected' if filters.has_att=='no' else '' }}>Without</option></select></div>
+  <div style="display:flex;gap:8px;align-items:flex-end;"><button type="submit" class="btn btn-primary">Filter</button><a href="/mail{% if q %}?q={{ q|urlencode }}{% endif %}" class="btn btn-ghost">Clear</a></div>
+</form>
+
+{% if sha %}
+<div class="alert alert-info" style="margin-bottom:14px;font-size:.87rem;" data-kk="mail-sha-filter">
+  Showing only the <strong>{{ messages|length }}</strong> email{{ 's' if messages|length != 1 }} carrying
+  <strong>{{ sha_file or 'this exact attachment' }}</strong> (byte-identical copies, every mailbox).
+  &nbsp;<a href="/mail" style="color:var(--blue);">Show all mail</a>
+</div>
+{% endif %}
+
+{% if q and filters_on %}
+<div class="alert alert-info" style="margin-bottom:14px;font-size:.87rem;" data-kk="mail-filters-on">
+  These search results are still narrowed by your filters:
+  {% for k, v in filters_on.items() %}<strong>{{ v }}</strong>{{ ' · ' if not loop.last }}{% endfor %}
+  &nbsp;<a href="/mail?q={{ q|urlencode }}" style="color:var(--blue);">search all mailboxes instead</a>
+</div>
+{% endif %}
+
+{% if status.total == 0 %}
+<div class="card"><div class="card-body" style="text-align:center;padding:44px 24px;color:var(--mid);">
+  <div style="font-size:1.05rem;font-weight:700;color:var(--navy);margin-bottom:8px;">The mail archive is empty.</div>
+  <p style="max-width:560px;margin:0 auto 14px;">Click <strong>Sync mailboxes</strong> above to pull a local copy of every
+  email from every configured mailbox. Reading is strictly look-don&rsquo;t-touch:
+  nothing is ever marked read, moved, or deleted &mdash; the inboxes stay exactly as they are.</p>
+</div></div>
+{% else %}
+<div class="alert alert-info" style="margin-bottom:16px;">
+  <strong>{{ messages|length }}</strong> email{{ 's' if messages|length != 1 else '' }} shown
+  &nbsp;&middot;&nbsp; {{ status.total }} in the archive
+  ({% for a, n in status.by_account.items() %}{{ a }}: {{ n }}{{ ' · ' if not loop.last }}{% endfor %})
+  {% for s in status.sync %}{% if loop.first %}<span style="font-size:.8rem;color:var(--mid);">&nbsp;&mdash; last sync {{ s.last_synced or 'never' }}</span>{% endif %}{% endfor %}
+  {% if messages|length == 300 %}<span style="font-size:.8rem;color:var(--mid);">&nbsp;&mdash; showing the newest 300; search or filter to narrow</span>{% endif %}
+</div>
+
+<div class="card"><div class="card-body" style="padding:0;">
+<div class="table-wrap"><table class="sortable">
+  <thead><tr><th>Received</th><th>Mailbox</th><th>From</th><th>Subject</th><th>&#128206;</th><th>Documents</th></tr></thead>
+  <tbody>
+  {% for m in messages %}
+  <tr style="cursor:pointer;" onclick="window.location.href='/mail/{{ m.id }}?back={{ qs|urlencode }}'" title="Open this email">
+    <td data-sort="{{ m.date_iso }}" style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ m.date_iso or '—' }}</td>
+    <td data-sort="{{ m.account_name }}" style="white-space:nowrap;">
+      <span style="background:{{ acct_colors.get(m.account_name, '#546E7A') }};color:#fff;border-radius:10px;padding:2px 10px;font-size:.74rem;white-space:nowrap;">{{ m.account_name or '?' }}</span>
+    </td>
+    <td style="font-size:.85rem;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ m.from_addr or '—' }}</td>
+    <td style="font-size:.88rem;font-weight:600;color:var(--navy);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+      {%- if m.flagged %}<span style="color:var(--orange);" title="{{ m.flagged_reason }}">&#9873;</span> {% endif -%}
+      {%- if m.resend and m.resend > 1 %}<a href="/mail?sha={{ m.resend_sha }}" onclick="event.stopPropagation()" style="background:#B71C1C;color:#fff;border-radius:10px;padding:1px 8px;font-size:.7rem;vertical-align:middle;text-decoration:none;" title="An attachment on this email has arrived under {{ m.resend }} separate emails — click to see exactly those emails">&#8635;&#215;{{ m.resend }}</a> {% endif -%}
+      {{ m.subject or '(no subject)' }}</td>
+    <td data-sort="{{ m.attachment_count }}" style="font-size:.82rem;white-space:nowrap;"
+        title="{% for a in m.attachments %}{{ a.filename }}{{ ', ' if not loop.last }}{% endfor %}">
+      {% if m.attachment_count %}&#128206; {{ m.attachment_count }}{% else %}<span style="color:#bbb;">—</span>{% endif %}</td>
+    <td onclick="event.stopPropagation()" style="font-size:.8rem;white-space:nowrap;">
+      {% for r in m.records[:3] %}
+      <a class="recno" href="/entry/{{ r.entry_id }}/view" title="{{ r.vendor }} — {{ r.doc_type }}{% if r.appended %} · this email is at the back of the filed PDF{% endif %}">{{ r.record_no }}</a>{{ ' ' }}
+      {% endfor %}
+      {% if m.records|length > 3 %}<span style="color:var(--mid);">+{{ m.records|length - 3 }}</span>{% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" style="text-align:center;padding:40px;color:#999;">No emails match{% if q %} &ldquo;{{ q }}&rdquo;{% endif %}{% if filters_on %} with these filters{% endif %}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+</div></div>
+{% endif %}
+{% endblock %}

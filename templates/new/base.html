@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+{# Per-page titles, same source as classic — report #80. #}
+<title>{{ page_title or 'Klick Klack' }}</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+{# The "new look" chrome (2026-08-05) — the second view, staff-facing name
+   "Classy" (vs "Colorful" = classic), entered via the always-visible top-right
+   switch (_skin_switch.html, 2026-08-10). Visual source of
+   truth: the ui-redesign-sample branch mockups + ui-redesign/IMPLEMENTATION.md.
+   Everything functional (CSRF, poller, helper, modals, sort, show-me) is the
+   SAME code as classic via the _chrome_*.html includes — only the chrome
+   around it differs. The classic theme picker (Hippie/Rock Star/Coastal)
+   deliberately doesn't apply here: the new look is one deliberate palette. #}
+<link rel="stylesheet" href="/static/newlook.css">
+<link rel="stylesheet" href="/static/newlook_nav.css">
+<script>
+  // Apply the remembered pinned-menu state before paint — no drawer flash.
+  // (Same manners as the classic theme pre-paint; see new/_sidenav.html.)
+  try{if(localStorage.getItem('kk-nav')==='pinned')document.documentElement.classList.add('nav-pinned');}catch(e){}
+</script>
+{% include "_chrome_head_js.html" %}
+</head>
+<body>
+<div class="topbar">
+  {# The page links live in the menu drawer (new/_sidenav.html) behind this
+     burger — Karen's 2026-08-06 request. Settings / Ops Reports stay in the
+     account menu below (report #79); the search button replaces the always-
+     visible Go-to box (the box lives on inside the search overlay). #}
+  <button type="button" id="nav-burger" class="iconbtn" data-kk="nav-menu" aria-controls="side-nav"
+          aria-expanded="false" aria-label="Open the menu" title="Menu">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <a class="wordmark" href="/">Klick Klack</a>
+  <span class="topbar-spring"></span>
+  <button type="button" id="search-btn" class="iconbtn" data-kk="search-open"
+          aria-label="Search" title="Search &mdash; press / from anywhere">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+  </button>
+  <span class="who" id="nav-clock"></span>
+  {% if session.get('user') %}
+  <span class="who-links">
+    {% if my_pass_count and my_pass_count > 0 %}<a href="/#passed-to-you" title="Records teammates passed to you &mdash; see the dashboard">&#128221; For you ({{ my_pass_count }})</a>{% endif %}
+    {% if is_admin %}<a href="/reports" title="Issue reports">&#128027; Reports{% if open_report_count and open_report_count > 0 %} ({{ open_report_count }}){% endif %}</a>{% endif %}
+    <a href="#" onclick="openReport();return false;" title="Report a problem">&#128030; Report a problem</a>
+    {# The Classy/Colorful look switch — always visible top right, both looks. #}
+    {% include "_skin_switch.html" %}
+    {# Account menu — report #79, same contents and behaviour as classic. #}
+    <details class="usermenu" data-kk="usermenu">
+      <summary title="Your account">&#128100; {{ session.user }} <span class="usermenu-caret">&#9662;</span></summary>
+      <div class="usermenu-panel">
+        <a href="/account" data-kk="nav-account" class="{{ 'here' if request.endpoint=='account' else '' }}">My account</a>
+        {% if is_admin %}
+        <a href="/settings" data-kk="nav-settings" class="{{ 'here' if request.path.startswith('/settings') else '' }}">Settings</a>
+        <a href="/ops-reports" data-kk="nav-ops-reports" class="{{ 'here' if request.path.startswith('/ops-reports') else '' }}">Ops Reports</a>
+        {% endif %}
+        {# The way back to Colorful is the always-visible switch just left of
+           this menu (_skin_switch.html) — no buried menu item needed. #}
+        <a href="/logout" class="usermenu-out">Sign out</a>
+      </div>
+    </details>
+  </span>
+  {% endif %}
+</div>
+{% include "new/_sidenav.html" %}
+{# Open-issue indicator (report #68) — same behavior as classic, quieter dress. #}
+{% if page_issue_ids and request.endpoint != 'reports' %}
+<div style="text-align:right;padding:4px 24px 0;max-width:1060px;margin:0 auto;">
+  <a href="/reports?path={{ request.path|urlencode }}" class="issue-chip"
+     title="Issue report(s) were filed on this page &mdash; click to read, add a note, or mark resolved">
+    &#128027; {{ page_issue_ids|length }} open issue{{ 's' if page_issue_ids|length > 1 else '' }} about this page</a>
+</div>
+{% endif %}
+<div class="wrap">{% block content %}{% endblock %}</div>
+{% include "_chrome_page_js.html" %}
+
+{% include "_chrome_shared.html" %}
+</body></html>

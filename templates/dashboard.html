@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  a.kpi{display:block;text-decoration:none;transition:transform .1s,box-shadow .15s;}
+  a.kpi:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.15);}
+  .clickrow{cursor:pointer;}
+  .today-row{background:#fff;border-radius:8px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,.1);display:flex;align-items:center;gap:14px;text-decoration:none;color:inherit;border-left:4px solid var(--mid);transition:transform .1s,box-shadow .15s;}
+  .today-row:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.14);}
+  .today-row.danger{border-left-color:var(--red);}
+  .today-row.accent{border-left-color:var(--blue);}
+  .today-row.warn{border-left-color:var(--yellow);}
+  .today-row.info{border-left-color:#7030A0;}
+  .today-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;}
+  .today-row.danger .today-icon{background:#FDE8E8;}
+  .today-row.accent .today-icon{background:var(--pale);}
+  .today-row.warn .today-icon{background:#FFF8E1;}
+  .today-row.info .today-icon{background:#F1EAF8;}
+  .today-title{font-weight:700;color:var(--navy);font-size:.98rem;}
+  .today-sub{font-size:.82rem;color:var(--mid);margin-top:2px;}
+  /* Attention rows (legal/important + from-email): one line each. The name and
+     the AI's reason clip to an ellipsis; the full text stays in the hover title.
+     min-width:0 is the load-bearing part — a flex item defaults to
+     min-width:auto and refuses to shrink below its own nowrap text, so without
+     it these rows push the whole page sideways instead of clipping. */
+  .attn-body{flex:1;min-width:0;}
+  .attn-row{display:flex;gap:8px;align-items:baseline;text-decoration:none;color:inherit;font-size:.85rem;min-width:0;}
+  .attn-tag{font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:8px;white-space:nowrap;flex:none;}
+  .attn-tag.t-notice{background:var(--orange);color:#fff;}
+  .attn-tag.t-type{background:#F1EAF8;color:#7030A0;}
+  .attn-tag.t-queue{background:#FFF0D0;color:#995500;font-weight:600;}
+  .attn-who{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:8ch;flex:0 1 auto;}
+  .attn-why{color:#7A4A00;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 0;}
+  .attn-where{color:var(--mid);white-space:nowrap;flex:none;}
+  .attn-when{color:var(--mid);margin-left:auto;white-space:nowrap;flex:none;padding-left:4px;}
+  .menu-card{background:#fff;border-radius:12px;padding:1.1rem 1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.1);text-decoration:none;color:inherit;display:block;transition:transform .1s,box-shadow .15s;}
+  .menu-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.15);}
+  .menu-card.featured{border:2px solid var(--blue);}
+</style>
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1>Klick Klack</h1>
+    <p class="subtitle">{{ today }} &nbsp;&middot;&nbsp; Property Management Mail &amp; Email Intake</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    {% if not period.is_all and period.prev_month %}
+      <a href="/?month={{ period.prev_month }}" class="btn btn-ghost btn-sm" title="Previous month">&larr;</a>
+    {% endif %}
+    <span style="font-size:1rem;font-weight:700;color:var(--navy);min-width:120px;text-align:center;">{{ period.label }}</span>
+    {% if not period.is_all and period.next_month %}
+      <a href="/?month={{ period.next_month }}" class="btn btn-ghost btn-sm" title="Next month">&rarr;</a>
+    {% endif %}
+    {% if period.is_all %}
+      <a href="/" class="btn btn-primary btn-sm">This month</a>
+    {% else %}
+      <a href="/?range=all" class="btn btn-ghost btn-sm">All time</a>
+    {% endif %}
+    {# The old "Try the new look" button lived here until 2026-08-10 — the
+       Classy switch in the top-right corner (every page, both looks) is the
+       one way in and out now (_skin_switch.html). #}
+  </div>
+</div>
+
+{# ── "Today" — a ranked stack of what actually needs a decision, in priority
+   order. The review-queue row always exists in the DOM (id="review-tile" /
+   review-count / review-sub) even at zero, just hidden via inline style —
+   base.html's live poller reveals it in place when a scan lands while the
+   dashboard is sitting open, no refresh needed; if it only rendered on a
+   non-empty queue, a page loaded at zero could never come back to life. Every
+   other row is genuinely absent (not just hidden) when there's nothing in it,
+   since nothing else here updates without a reload anyway. #}
+{% set important_count = important|length %}
+{% set nothing_today = overdue_count == 0 and pending_count == 0 and expected_waiting == 0 and important_count == 0 and (my_passes|length) == 0 %}
+<div style="margin:18px 0;display:flex;flex-direction:column;gap:10px;">
+  {% if my_passes %}
+  {# ── Passed to you: records teammates handed over, sticky-note style ── #}
+  <div id="passed-to-you" class="today-row" style="border-left-color:#E6C200;flex-direction:column;align-items:stretch;gap:8px;background:#FFFDF2;">
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div class="today-icon" style="background:#FFF8DC;">&#128221;</div>
+      <div class="today-title">Passed to you ({{ my_passes|length }})</div>
+    </div>
+    {% for p in my_passes %}
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 10px;background:#FFF8DC;border-radius:6px;">
+      <a href="/entry/{{ p.entry_id }}/view" style="text-decoration:none;color:var(--blue);font-weight:600;white-space:nowrap;">
+        <span class="recno">{{ p.record_no or '#' ~ p.entry_id }}</span> {{ p.vendor or 'Record' }}</a>
+      <span style="font-size:.8rem;color:var(--mid);white-space:nowrap;">{% if p.amount %}${{ "{:,.2f}".format(p.amount) }} &middot; {% endif %}{{ p.entry_status or '' }} &middot; from {{ p.from_user or '?' }}</span>
+      {% if p.note %}<span style="flex:1;min-width:12ch;font-size:.83rem;color:#6b5900;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ p.note }}">&ldquo;{{ p.note }}&rdquo;</span>{% endif %}
+      <form method="POST" action="/pass/{{ p.id }}/done" style="margin:0;margin-left:auto;">
+        <button type="submit" class="btn btn-ghost btn-sm">&#10003; Done</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if nothing_today %}
+  <div class="today-row" style="border-left-color:#70AD47;">
+    <div class="today-icon" style="background:#E8F5E9;">&#9989;</div>
+    <div><div class="today-title">You're all caught up</div><div class="today-sub">Nothing waiting on review, no overdue bills, no missing expected bills.</div></div>
+  </div>
+  {% endif %}
+
+  {% if overdue_count and overdue_count > 0 %}
+  {# Overdue rescue goes to the urgency-bucketed order; the plain nav "Catch Up"
+     defaults to Karen's pay-in-received-order stack. #}
+  <a href="/catchup?order=due" class="today-row danger">
+    <div class="today-icon">&#9200;</div>
+    <div style="flex:1;">
+      <div class="today-title">{{ overdue_count }} bill{{ 's' if overdue_count != 1 else '' }} overdue</div>
+      <div class="today-sub">${{ "{:,.2f}".format(overdue_total) }} total</div>
+    </div>
+    <span class="btn btn-sm" style="background:var(--red);color:#fff;">Catch up now &rarr;</span>
+  </a>
+  {% endif %}
+
+  <a href="/review" class="today-row {{ 'danger' if urgent_pending > 0 else 'accent' }}" id="review-tile" style="{{ 'display:none;' if pending_count == 0 else '' }}">
+    <div class="today-icon">&#128229;</div>
+    <div style="flex:1;">
+      <div class="today-title"><span id="review-count">{{ pending_count }}</span> document{{ 's' if pending_count != 1 else '' }} waiting for review</div>
+      <div class="today-sub" id="review-sub">{{ (urgent_pending|string + ' past due — review these first') if urgent_pending > 0 else 'Mostly scanned mail and email' }}</div>
+    </div>
+    <span class="btn btn-sm" style="background:{{ 'var(--red)' if urgent_pending > 0 else 'var(--blue)' }};color:#fff;">Start reviewing &rarr;</span>
+  </a>
+
+  {% if expected_waiting and expected_waiting > 0 %}
+  <a href="/expected" class="today-row warn">
+    <div class="today-icon">&#128225;</div>
+    <div style="flex:1;">
+      <div class="today-title">{{ expected_waiting }} expected bill{{ 's' if expected_waiting != 1 else '' }} ha{{ 've' if expected_waiting != 1 else 's' }}n't arrived yet</div>
+      <div class="today-sub">Usually show up by now this period</div>
+    </div>
+    <span class="btn btn-sm" style="background:var(--orange);color:#fff;">See which &rarr;</span>
+  </a>
+  {% endif %}
+
+  {% if important_count > 0 %}
+  <div class="today-row info" style="align-items:flex-start;">
+    <div class="today-icon">&#9878;&#65039;</div>
+    <div class="attn-body">
+      <div class="today-title">{{ important_count }} legal or important document{{ 's' if important_count != 1 else '' }} need{{ '' if important_count != 1 else 's' }} attention</div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
+        {% for it in important %}
+        <a href="/entry/{{ it.id }}/view" class="attn-row">
+          {% if it.notice_summary %}<span class="attn-tag t-notice" title="{{ it.notice_summary }}">&#128206; Notice</span>
+          {% elif it.important %}<span class="attn-tag t-notice" title="{{ it.important_reason or 'Manually flagged important' }}">&#9873; {{ it.doc_type or 'Flagged' }}</span>
+          {% else %}<span class="attn-tag t-type">{{ it.doc_type }}</span>{% endif %}
+          <span class="attn-who" title="{{ it.label or it.vendor or 'Untitled document' }}">{{ it.label or it.vendor or 'Untitled document' }}</span>
+          {% if it.notice_summary %}<span class="attn-why" title="{{ it.notice_summary }}">— {{ it.notice_summary }}</span>
+          {% else %}<span class="attn-where">{{ it.property_code or it.entity_code or '' }}</span>{% endif %}
+          <span class="attn-when">{{ it.date_received }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      <div style="margin-top:8px;font-size:.78rem;">
+        <a href="/log?doc_type=Legal" style="color:#7030A0;">Legal &rarr;</a>
+        &nbsp;&middot;&nbsp;
+        <a href="/log?doc_type=Correspondence" style="color:#7030A0;">Correspondence &rarr;</a>
+        &nbsp;&middot;&nbsp;
+        <a href="/log?important=1" style="color:#7030A0;">&#9873; Flagged &rarr;</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── From email — Karen's "did I miss something in email?" lens. Email-only
+     attention items (flagged / bundled notices / legal & correspondence) from
+     both the review queue and the log. Routine email bills stay out. ── #}
+  {% if email_eyes %}
+  <div class="today-row info" style="align-items:flex-start;">
+    <div class="today-icon">&#128231;</div>
+    <div class="attn-body">
+      <div class="today-title">From email &mdash; worth your eyes</div>
+      <div class="today-sub">These arrived by email, not the mail pile &mdash; nobody opened an envelope for them</div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
+        {% for e in email_eyes %}
+        <a href="{{ '/review/' ~ e.sid if e.kind == 'queue' else '/entry/' ~ e.id ~ '/view' }}"
+           class="attn-row">
+          {% if e.notice %}<span class="attn-tag t-notice">&#128206; Notice</span>
+          {% elif e.important %}<span class="attn-tag t-notice">&#9873; {{ e.doc_type or 'Flagged' }}</span>
+          {% else %}<span class="attn-tag t-type">{{ e.doc_type }}</span>{% endif %}
+          <span class="attn-who" title="{{ e.who }}">{{ e.who }}</span>
+          {% if e.why %}<span class="attn-why" title="{{ e.why }}">&mdash; {{ e.why }}</span>{% endif %}
+          {% if e.kind == 'queue' %}<span class="attn-tag t-queue">awaiting review</span>{% endif %}
+          <span class="attn-when">{{ e.received }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      <div style="margin-top:8px;font-size:.78rem;color:var(--mid);">
+        &#128465;&#65039; {{ email_junk_week }} junk email doc{{ 's' if email_junk_week != 1 else '' }} auto-filtered this week
+        &mdash; nothing is ever deleted: <a href="/filtered" style="color:#7030A0;">glance &rarr;</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Always-there action menu — the four things staff actually come here to
+   do, regardless of whether anything above is urgent today. ── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:24px;">
+  <a href="/review" class="menu-card {{ 'featured' if pending_count > 0 else '' }}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:1.4rem;">&#128196;</span>
+      {% if pending_count > 0 %}<span style="background:var(--pale);color:var(--blue);font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:10px;">{{ pending_count }} waiting</span>{% endif %}
+    </div>
+    <div class="today-title" style="font-size:1rem;">Review new mail</div>
+    <div class="today-sub">Confirm what came in</div>
+  </a>
+  <a href="/bills?view=due" class="menu-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:1.4rem;">&#128176;</span>
+      {% if overdue_count > 0 %}<span style="background:#FDE8E8;color:var(--red);font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:10px;">{{ overdue_count }} overdue</span>{% endif %}
+    </div>
+    <div class="today-title" style="font-size:1rem;">Pay bills</div>
+    <div class="today-sub">See everything unpaid</div>
+  </a>
+  {# A <form> can't legally nest inside an <a> (the outer link's card style
+     everywhere else), so this card is a plain div with its own link title. #}
+  <div class="menu-card" style="display:flex;flex-direction:column;">
+    <span style="font-size:1.4rem;margin-bottom:8px;">&#128269;</span>
+    <a href="/log" class="today-title" style="font-size:1rem;margin-bottom:8px;text-decoration:none;color:inherit;">Find a record</a>
+    <form method="GET" action="/log" style="display:flex;gap:6px;">
+      <input type="text" name="search" placeholder="Vendor, property, amount&hellip;" style="flex:1;font-size:.85rem;padding:6px 10px;">
+      <button type="submit" class="btn btn-ghost btn-sm" style="padding:6px 10px;">&#128269;</button>
+    </form>
+  </div>
+  <a href="/entry/new" class="menu-card">
+    <span style="font-size:1.4rem;margin-bottom:8px;display:block;">&#10133;</span>
+    <div class="today-title" style="font-size:1rem;">Log something new</div>
+    <div class="today-sub">Add a bill or record by hand</div>
+  </a>
+  <a href="/desk" class="menu-card">
+    <span style="font-size:1.4rem;margin-bottom:8px;display:block;">&#128209;</span>
+    <div class="today-title" style="font-size:1rem;">The desk</div>
+    <div class="today-sub">Your day as paper &mdash; mail piles, wall calendar, corkboard, cabinet, rolodex</div>
+  </a>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:24px;">
+  <div class="card">
+    <div class="card-header">By Document Type</div>
+    <div class="card-body" style="padding:0;">
+      <table><thead><tr><th>Type</th><th>Count</th><th>Amount ($)</th></tr></thead><tbody>
+      {% for row in stats.by_type %}<tr class="clickrow" onclick="location.href='/log?doc_type={{ row.doc_type }}&{{ period.qs }}'"><td>{{ row.doc_type or 'Unknown' }}</td><td>{{ row.cnt }}</td><td>${{ "{:,.2f}".format(row.total) }}</td></tr>
+      {% else %}<tr><td colspan="3" style="color:#999;text-align:center;padding:20px;">No data for {{ period.label }}</td></tr>{% endfor %}
+      </tbody></table></div></div>
+  <div class="card" style="grid-column:span 2;">
+    <div class="card-header">By Entity</div>
+    <div class="card-body" style="padding:0;">
+      <table><thead><tr><th>Code</th><th>Entity</th><th>Items</th><th>Bills ($)</th><th>Income ($)</th></tr></thead><tbody>
+      {% for row in stats.by_entity %}<tr class="clickrow" onclick="location.href='/log?entity_code={{ row.entity_code }}&{{ period.qs }}'" title="View {{ row.entity_code }} records"><td><code>{{ row.entity_code or ('&mdash;'|safe) }}</code></td><td>{{ row.entity_name or ('&mdash;'|safe) }}</td><td>{{ row.cnt }}</td><td>${{ "{:,.2f}".format(row.bills_amt) }}</td><td style="color:#2E7D32;font-weight:bold">${{ "{:,.2f}".format(row.income_amt) }}</td></tr>
+      {% else %}<tr><td colspan="5" style="color:#999;text-align:center;padding:20px;">No data for {{ period.label }}</td></tr>{% endfor %}
+      </tbody></table></div></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>Recent Activity</span>
+    <a href="/activity" style="color:#fff;font-size:.82rem;font-weight:normal;">View all &rarr;</a>
+  </div>
+  <div class="card-body" style="padding:0;">
+    {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+    <table><thead><tr><th>When</th><th>Who</th><th>Activity</th><th>Record</th><th>Status</th></tr></thead><tbody>
+    {% for a in activity %}<tr {% if a.entry_id %}class="clickrow" onclick="window.location.href='/entry/{{ a.entry_id }}/view'" title="Open record"{% endif %}>
+      <td style="white-space:nowrap;font-size:.8rem;color:var(--mid);">{{ a.created_at }}</td>
+      <td style="font-size:.85rem;">{{ a.user or ('&mdash;'|safe) }}</td>
+      <td style="font-size:.85rem;"><strong>{{ a.action }}</strong>{% if a.detail %} <span style="color:var(--mid);">&middot; {{ a.detail }}</span>{% endif %}</td>
+      <td>{{ a.vendor or a.entity_code or ('#' ~ a.entry_id if a.entry_id else ('&mdash;'|safe)) }}</td>
+      <td>{% if a.status %}<span class="badge-status {{ sc.get(a.status,'s-pending') }}">{{ a.status }}</span>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="5" style="color:#999;text-align:center;padding:30px;">No activity yet. Logging a record, changing a status, or marking a bill paid will show up here.</td></tr>{% endfor %}
+    </tbody></table></div></div>
+
+<script>
+// Keep the "documents waiting for review" row live — new scans arrive via the
+// watcher while the dashboard is open. Shows/hides the whole row (it's absent
+// from the "Today" stack entirely once the queue empties) and swaps
+// accent/danger styling the same way the server-rendered version does.
+function styleReviewTile(n, urgent){
+  var t=document.getElementById('review-tile'); if(!t) return;
+  t.style.display = n===0 ? 'none' : '';
+  document.getElementById('review-count').textContent=n;
+  var color = urgent>0 ? 'var(--red)' : 'var(--blue)';
+  t.classList.toggle('danger', urgent>0);
+  t.classList.toggle('accent', urgent<=0);
+  document.getElementById('review-sub').textContent =
+    urgent>0 ? (urgent+' past due — review these first') : 'Mostly scanned mail and email';
+  var btn = t.querySelector('.btn'); if(btn) btn.style.background = color;
+}
+// The actual polling loop lives once in base.html (shared with the nav badge);
+// it calls window.styleReviewTile when this function is defined on the page.
+</script>
+{% endblock %}

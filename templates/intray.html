@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In-tray — Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<style>
+  :root{
+    --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+    --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+    --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+    --green:#2e6e3e; --red:#b03a2e; --blue-ink:#2e5aa8;
+    --sticky:#f7e896; --sticky-edge:#d9c65a;
+    /* the blotter itself — this page's own wood-brown desktop, darker than the
+       tan --room used on the other paper views */
+    --blotter:#6b4f35; --blotter-ink:#f3ead2; --blotter-ink-soft:#cbb491;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f;
+      --blotter:#4a3524; --blotter-ink:#f0e6cf; --blotter-ink-soft:#b39d78; }
+  }
+  :root[data-theme="dark"]{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f;
+    --blotter:#4a3524; --blotter-ink:#f0e6cf; --blotter-ink-soft:#b39d78; }
+  :root[data-theme="light"]{ --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+    --blotter:#6b4f35; --blotter-ink:#f3ead2; --blotter-ink-soft:#cbb491; }
+
+  body{ background:var(--blotter); color:var(--blotter-ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+  .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+  .mono{ font-family:Consolas,"Courier New",monospace; }
+  a{ color:inherit; }
+  a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  /* ── nav (same bar as the other paper views) ── */
+  .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+    gap:18px; padding:10px 22px; flex-wrap:wrap; }
+  .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+  .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+  .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+  .nav .tabs .off{ color:#aebad2; }
+  .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+  .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+  .nav .nav-right{ margin-left:auto; font-size:.8rem; color:#dbe4f5; }
+
+  .context{ max-width:1180px; margin:14px auto 0; padding:0 20px;
+    font-size:.82rem; color:var(--blotter-ink-soft); display:flex; gap:14px; flex-wrap:wrap; }
+  .context b{ color:var(--blotter-ink); }
+
+  /* ── the blotter: three columns, IN / sheet / OUT ── */
+  .blotter{ max-width:1180px; margin:22px auto 30px; padding:0 20px;
+    display:grid; grid-template-columns:120px 1fr 120px; gap:26px; align-items:start; }
+  @media (max-width:760px){
+    .blotter{ grid-template-columns:1fr; }
+    .rail{ flex-direction:row !important; justify-content:center; gap:16px; }
+    .pile, .drop{ margin-bottom:0 !important; }
+  }
+
+  .rail{ display:flex; flex-direction:column; align-items:center; text-align:center;
+    padding-top:14px; }
+  .rail-tag{ font-size:.68rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--blotter-ink-soft); margin-bottom:10px; }
+  .rail-count{ font-size:.86rem; color:var(--blotter-ink); }
+  .rail-count b{ font-size:1.05rem; }
+  .rail-nav{ margin-top:12px; font-size:.78rem; text-decoration:underline;
+    text-underline-offset:3px; color:var(--blotter-ink-soft); }
+  .rail-nav:hover{ color:var(--blotter-ink); }
+
+  /* decorative pile of incoming paper — not interactive, just sets the scene */
+  .pile{ position:relative; width:72px; height:50px; margin-bottom:12px; }
+  .pile-sheet{ position:absolute; left:50%; width:60px; height:40px;
+    background:var(--paper); border:2px solid var(--paper-edge); }
+  .pile-sheet.p1{ top:9px; transform:translateX(-50%) rotate(-3deg); }
+  .pile-sheet.p2{ top:4px; transform:translateX(-50%) rotate(2deg); }
+  .pile-sheet.p3{ top:0; transform:translateX(-50%) rotate(-1deg); }
+
+  .drop{ width:60px; height:40px; border:2px dashed var(--blotter-ink-soft);
+    display:flex; align-items:center; justify-content:center; margin-bottom:12px;
+    font-size:.62rem; line-height:1.2; color:var(--blotter-ink-soft); text-align:center; }
+
+  /* ── the sheet under review ── */
+  .sheet-col{ display:flex; flex-direction:column; align-items:center;
+    padding:28px 0 40px; }
+  .sheet-wrap{ position:relative; width:100%; max-width:900px; }
+  .sheet-paper{ background:var(--paper); border:2px solid var(--paper-edge); }
+  .sheet-empty{ background:transparent; border:2px dashed var(--paper-edge);
+    height:420px; display:flex; align-items:center; justify-content:center; padding:20px; }
+
+  .missing-file{ padding:70px 36px; display:flex; flex-direction:column; gap:12px;
+    align-items:center; text-align:center; border-left:6px solid var(--red); }
+  .missing-file .mf-head{ font-size:1.15rem; color:var(--red); }
+  .missing-file .mf-path{ font-size:.78rem; color:var(--pencil); overflow-wrap:anywhere;
+    border:1px solid var(--paper-edge); padding:6px 10px; max-width:100%; }
+  .missing-file .mf-sub{ font-size:.85rem; color:var(--ink); max-width:46ch; line-height:1.5; }
+  .sticky-ai{ position:absolute; top:-16px; right:16px; max-width:320px;
+    background:var(--sticky); border-bottom:4px solid var(--sticky-edge); color:#4a3d0c;
+    padding:10px 13px; font-size:.86rem; line-height:1.4; transform:rotate(2deg); z-index:5; }
+  .sticky-overdue{ position:absolute; top:58px; right:44px; max-width:220px;
+    background:var(--sticky); border-bottom:4px solid var(--sticky-edge); color:var(--red);
+    padding:6px 11px; font-size:.76rem; font-weight:700; transform:rotate(-2deg); z-index:4; }
+
+  .stamp-match{ position:absolute; left:22px; bottom:-24px; background:var(--paper);
+    border:2px solid var(--green); color:var(--green); padding:10px 16px;
+    font-weight:700; text-transform:uppercase; letter-spacing:.07em; font-size:.82rem;
+    text-align:center; transform:rotate(-3deg); z-index:5; }
+  .stamp-match .stamp-sub{ display:block; margin-top:4px; font-weight:400;
+    letter-spacing:.01em; text-transform:none; font-size:.74rem; }
+
+  /* ── the action row ── */
+  .actions-row{ display:flex; justify-content:center; align-items:stretch;
+    gap:18px; flex-wrap:wrap; margin-top:38px; }
+  .actions-row form{ margin:0; }
+  .btn-stamp{ background:var(--paper); border:2px solid var(--green); color:var(--green);
+    font-weight:700; text-transform:uppercase; letter-spacing:.05em; font-size:.85rem;
+    padding:13px 24px; cursor:pointer; }
+  .btn-stamp:hover{ background:#fff; }
+  .btn-primary{ display:inline-flex; align-items:center; background:var(--paper);
+    border:2px solid var(--wood); border-bottom-width:4px; color:var(--wood-dark);
+    font-weight:700; font-size:.85rem; padding:11px 20px; text-decoration:none; }
+  .btn-primary:hover{ background:#fff; }
+  .btn-outline{ display:inline-flex; align-items:center; background:none;
+    border:2px solid var(--wood); color:var(--paper); font-weight:600; font-size:.85rem;
+    padding:11px 20px; text-decoration:none; }
+  .btn-outline:hover{ background:rgba(253,251,243,.12); }
+  .btn-danger{ background:var(--paper); border:2px solid var(--red); color:var(--red);
+    font-weight:700; font-size:.85rem; padding:11px 20px; cursor:pointer; }
+  .btn-danger:hover{ background:#fff; }
+
+  .caption-dim{ text-align:center; margin-top:14px; font-size:.78rem;
+    color:var(--blotter-ink-soft); }
+
+  /* honest notice: rows that outlived their file, and the way to clear them */
+  .lost-banner{ max-width:1180px; margin:14px auto 0; padding:10px 14px;
+    background:var(--paper); border:2px solid var(--red); border-left-width:6px;
+    color:var(--ink); font-size:.84rem; display:flex; align-items:center;
+    gap:14px; flex-wrap:wrap; }
+  .lost-banner .lb-note{ color:var(--pencil); font-size:.78rem; }
+  .btn-clear{ background:none; border:2px solid var(--red); color:var(--red);
+    font-weight:700; font-size:.78rem; padding:6px 12px; cursor:pointer;
+    margin-left:auto; }
+  .btn-clear:hover{ background:#fff; }
+
+  .empty-note{ font-size:1.1rem; color:var(--blotter-ink); text-align:center; }
+  .empty-wrap{ display:flex; flex-direction:column; align-items:center; gap:18px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <span class="tabs">
+    <a class="sib" href="/desk">the desk</a>
+    <a class="sib" href="/cabinet">file cabinet</a>
+    <a class="sib" href="/rolodex">rolodex</a>
+    <span class="on">in-tray</span>
+    <a class="sib" href="/calendar">wall calendar</a>
+    <a class="sib" href="/board">corkboard</a>
+    <a class="sib" href="/tray">tray gauge</a>
+  </span>
+  {% if not empty %}<span class="nav-right mono">batch {{ data.batch_number or '—' }} · sheet {{ pos }} of {{ total }}</span>{% endif %}
+</nav>
+
+<div class="context">
+  <span>One sheet at a time, oldest received first. The stamp files it through the same route the review form uses — this page adds no new write path.</span>
+</div>
+
+{% if missing_count %}
+<form class="lost-banner" method="POST" action="/intray/clear_missing"
+      onsubmit="return confirm('Clear {{ missing_count }} sheet(s) from the queue?\n\nOnly the queue rows are removed — no document is deleted. Anything the junk filter moved is still recoverable on the Filtered page.');">
+  <input type="hidden" name="csrf_token" value="{{ session['csrf'] }}">
+  <span>{{ missing_count }} sheet{{ 's' if missing_count != 1 }} in this tray lost {{ 'its' if missing_count == 1 else 'their' }} scan file.
+    <span class="lb-note">They sit at the bottom of the tray — nothing can be filed from them.</span></span>
+  <button type="submit" class="btn-clear">clear them from the queue</button>
+</form>
+{% endif %}
+
+{% if empty %}
+  <div class="blotter">
+    <div class="rail">
+      <div class="rail-tag">in</div>
+      <!-- decorative: an empty incoming stack -->
+      <div class="pile" aria-hidden="true"></div>
+      <div class="rail-count"><b>{{ remaining }}</b> left</div>
+    </div>
+
+    <div class="sheet-col">
+      <div class="empty-wrap">
+        <div class="sheet-wrap">
+          <div class="sheet-empty">
+            <span class="hand empty-note">the tray is empty — nothing to review</span>
+          </div>
+        </div>
+        <a class="btn-primary" href="/desk">back to the desk →</a>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="rail-tag">out</div>
+      <div class="drop hand">drops here</div>
+      <div class="rail-count"><b>{{ cleared_today }}</b> filed today</div>
+    </div>
+  </div>
+{% else %}
+  <div class="blotter">
+    <div class="rail">
+      <div class="rail-tag">in</div>
+      <!-- decorative: a small offset stack of incoming paper, not interactive -->
+      <div class="pile" aria-hidden="true">
+        <span class="pile-sheet p1"></span>
+        <span class="pile-sheet p2"></span>
+        <span class="pile-sheet p3"></span>
+      </div>
+      <div class="rail-count"><b>{{ remaining }}</b> left</div>
+      {% if prev_id %}<a class="rail-nav" href="/intray?scan={{ prev_id }}">‹ previous sheet</a>{% endif %}
+    </div>
+
+    <div class="sheet-col">
+      <div class="sheet-wrap">
+        <div class="sheet-paper">
+          {% if file_missing %}
+          <div class="missing-file">
+            <div class="mf-head hand">this sheet's scan file is missing from disk</div>
+            <div class="mf-path mono">{{ missing_path or 'no path was recorded' }}</div>
+            <div class="mf-sub">It was queued, but the file has since been moved or renamed.
+              Stamping is disabled — nothing should get filed without its paper.
+              Set it aside (recoverable, clears it from the queue) or open the full
+              form to investigate.</div>
+          </div>
+          {% else %}
+          <iframe src="/scan/preview/{{ scan_id }}" style="width:100%;height:620px;border:none;background:#fff;" title="document preview"></iframe>
+          {% endif %}
+        </div>
+
+        <div class="sticky-ai hand">AI: {{ data.doc_type or 'document' }}{% if data.vendor %} — {{ data.vendor }}{% endif %}{% if data.entity_code %} · {{ data.entity_code }}{% endif %}{% if props %} {{ props|join(', ') }}{% endif %}{% if data.amount %} · ${{ '{:,.2f}'.format(data.amount) }}{% endif %}{% if data.due_date %} · due {{ data.due_date }}{% endif %} · {{ (data.ai_confidence or 'unknown')|lower }} confidence</div>
+
+        {% if overdue %}
+        <div class="sticky-overdue hand">already past due</div>
+        {% endif %}
+
+        {% if match %}
+        <div class="stamp-match">MATCHES PRIOR PAYMENT<span class="stamp-sub">{{ match.method }} ${{ '{:,.2f}'.format(match.amount) }} on {{ match.paid_date }}</span></div>
+        {% endif %}
+      </div>
+
+      <div class="actions-row">
+        {% if can_stamp %}
+        <form method="POST" action="/review/{{ scan_id }}/confirm">
+          <input type="hidden" name="csrf_token" value="{{ session['csrf'] }}">
+          <input type="hidden" name="return_to" value="intray">
+          <input type="hidden" name="entity_code" value="{{ data.entity_code or '' }}">
+          {% for p in props %}<input type="hidden" name="property_codes" value="{{ p }}">{% endfor %}
+          <input type="hidden" name="vendor" value="{{ data.vendor or '' }}">
+          <input type="hidden" name="amount" value="{{ data.amount or '' }}">
+          <input type="hidden" name="due_date" value="{{ data.due_date or '' }}">
+          <input type="hidden" name="doc_type" value="{{ data.doc_type or 'Other' }}">
+          <input type="hidden" name="bill_type_code" value="{{ data.bill_type_code or '' }}">
+          <input type="hidden" name="invoice_number" value="{{ data.invoice_number or '' }}">
+          <input type="hidden" name="account_number" value="{{ data.account_number or '' }}">
+          <input type="hidden" name="date_received" value="{{ data.received_date or today }}">
+          <input type="hidden" name="scanned_date" value="{{ data.scanned_date or '' }}">
+          <input type="hidden" name="batch_number" value="{{ data.batch_number or '' }}">
+          <input type="hidden" name="mail_type" value="{{ data.mail_type or 'Physical Mail' }}">
+          <input type="hidden" name="notes" value="">
+          {% if data.important %}
+          <input type="hidden" name="important" value="1">
+          <input type="hidden" name="important_reason" value="{{ data.important_reason or '' }}">
+          {% endif %}
+          <button type="submit" class="btn-stamp">Stamp: approve &amp; file</button>
+        </form>
+        {% else %}
+        <a class="btn-primary" href="/review/{{ scan_id }}">Fill in the details →</a>
+        {% endif %}
+
+        <a class="btn-outline" href="/review/{{ scan_id }}">Correct a field</a>
+
+        <form method="POST" action="/review/{{ scan_id }}/skip" onsubmit="return confirm('Set this sheet aside? It moves to the _Skipped folder — recoverable, but out of the queue.');">
+          <input type="hidden" name="csrf_token" value="{{ session['csrf'] }}">
+          <input type="hidden" name="return_to" value="intray">
+          <button type="submit" class="btn-danger">Set aside</button>
+        </form>
+      </div>
+
+      <div class="caption-dim">the stamp files it exactly as the review form would — same duplicate check, same filing</div>
+    </div>
+
+    <div class="rail">
+      <div class="rail-tag">out</div>
+      <div class="drop hand">drops here</div>
+      <div class="rail-count"><b>{{ cleared_today }}</b> filed today</div>
+      {% if next_id %}<a class="rail-nav" href="/intray?scan={{ next_id }}">skip ahead ›</a>{% endif %}
+    </div>
+  </div>
+{% endif %}
+
+</body>
+</html>

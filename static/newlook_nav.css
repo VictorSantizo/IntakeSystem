@@ -1,0 +1,61 @@
+/* Klick Klack new look — the hamburger chrome (2026-08-06, chat-requested).
+   Three controls, same as every modern app: the burger opens the menu drawer,
+   the panel button pins it open as a real sidebar (remembered per browser,
+   like the classic themes), and the magnifier opens one search box that does
+   both jobs — words search everything, a record number jumps straight to it.
+   Markup + behavior: templates/new/_sidenav.html. Kept out of newlook.css so
+   the drawer chrome stays one self-contained layer over the page styles. */
+
+/* icon buttons in the topbar / drawer head */
+.iconbtn{background:none;border:none;padding:5px;border-radius:6px;cursor:pointer;
+  color:var(--ink-soft);display:inline-flex;align-items:center;font:inherit;}
+.iconbtn:hover{color:var(--ink);background:var(--cream);}
+.iconbtn svg{display:block;}
+.topbar{align-items:center;}   /* icons center better than baseline text did */
+.topbar-spring{flex:1;}
+
+/* ── the menu drawer ── */
+#side-nav{position:fixed;top:0;left:0;bottom:0;width:230px;background:var(--paper);
+  border-right:1px solid var(--line);z-index:900;padding:10px 0 20px;overflow-y:auto;
+  transform:translateX(-100%);transition:transform .16s ease;}
+html.nav-open #side-nav,html.nav-pinned #side-nav{transform:none;}
+#side-nav .side-head{display:flex;align-items:center;gap:8px;padding:6px 12px 16px;}
+#side-nav nav{display:flex;flex-direction:column;}
+#side-nav nav a{color:var(--ink-soft);text-decoration:none;font-size:.95rem;
+  padding:10px 22px;display:flex;align-items:baseline;gap:8px;}
+#side-nav nav a:hover{background:var(--cream);color:var(--ink);text-decoration:none;}
+#side-nav nav a.here{color:var(--accent);font-weight:600;background:var(--cream);
+  border-right:2px solid var(--accent);}
+#side-nav .badge{color:var(--accent);font-weight:600;font-size:.82rem;}
+
+/* dimmed page behind the drawer while it floats (not pinned) */
+#side-backdrop{position:fixed;inset:0;background:rgba(60,56,53,.28);z-index:880;
+  opacity:0;pointer-events:none;transition:opacity .16s;}
+html.nav-open:not(.nav-pinned) #side-backdrop{opacity:1;pointer-events:auto;}
+
+/* pinned: the page yields; the drawer's wordmark replaces the topbar's */
+html.nav-pinned body{padding-left:230px;}
+html.nav-pinned .topbar .wordmark{display:none;}
+
+/* ── the search overlay ── */
+#search-overlay{position:fixed;inset:0;background:rgba(60,56,53,.28);z-index:950;
+  display:none;justify-content:center;align-items:flex-start;padding:12vh 16px 0;}
+#search-overlay.on{display:flex;}
+.search-card{background:#fff;border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 14px 40px rgba(0,0,0,.2);width:560px;max-width:92vw;padding:14px 16px;}
+.search-card form{display:flex;gap:10px;align-items:center;margin:0;}
+.search-card svg{color:var(--ink-soft);flex:none;}
+.search-card input{flex:1;border:none;outline:none;font-size:1.05rem;
+  font-family:var(--sans);color:var(--ink);background:none;}
+.search-hint{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);
+  font-size:.76rem;color:var(--ink-soft);line-height:1.6;}
+
+/* small screens: a pinned drawer would eat the page — it behaves as an
+   overlay there instead (the JS knows too). */
+@media(max-width:680px){
+  html.nav-pinned body{padding-left:0;}
+  html.nav-pinned .topbar .wordmark{display:inline;}
+  html.nav-pinned #side-nav{transform:translateX(-100%);}
+  html.nav-open #side-nav{transform:none;}
+  html.nav-open #side-backdrop{opacity:1;pointer-events:auto;}
+}

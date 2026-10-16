@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+  <h1>&#128027; Issue Reports</h1>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <a href="/reports?view=validate" class="btn {{ 'btn-primary' if view=='validate' else 'btn-ghost' }} btn-sm" title="Dev believes these are fixed — verify or bounce each">&#9989; To verify ({{ n_validate }})</a>
+    <a href="/reports?view=active" class="btn {{ 'btn-primary' if view=='active' else 'btn-ghost' }} btn-sm">Open ({{ n_active }})</a>
+    <a href="/reports?view=all" class="btn {{ 'btn-primary' if view=='all' else 'btn-ghost' }} btn-sm">All ({{ n_all }})</a>
+    <form method="POST" action="/reports/ai_refresh" style="margin:0;">
+      <button class="btn btn-ghost btn-sm" title="Write a one-line AI summary (and suggest a topic) for reports that don't have one yet">&#10024; AI summaries</button>
+    </form>
+  </div>
+</div>
+{% if view == 'validate' %}
+<p class="subtitle">The validation queue: dev believes these are fixed, oldest first. Check each one — &#10003; Verified if it works, &#8617; bounce it back if it doesn't.</p>
+{% elif view == 'page' %}
+<p class="subtitle">Issues filed on <strong>{{ path }}</strong> &nbsp;&middot;&nbsp; <a href="/reports" style="color:var(--blue);">&larr; all reports</a></p>
+{% else %}
+<p class="subtitle">Problems reported by staff, oldest first — priority-bumped issues on top.</p>
+{% endif %}
+{% if ai_done and ai_done != '0' %}
+<div class="alert alert-info" style="padding:8px 14px;">&#10024; AI summaries written for {{ ai_done }} report(s).</div>
+{% elif ai_done == '0' %}
+<div class="alert alert-info" style="padding:8px 14px;">&#10024; No AI summaries written — either every report has one, or the AI is unavailable right now.</div>
+{% endif %}
+
+{% if view != 'page' %}
+<form method="GET" action="/reports" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 14px;font-size:.85rem;">
+  <input type="hidden" name="view" value="{{ view }}">
+  {# #73: search the text, the topic, the AI summary, the page, and the note
+     trail — how Joshua finds every issue about one thing to label them. #}
+  <label>Search
+    <input type="search" name="q" value="{{ f_q }}" placeholder="e.g. email"
+           style="padding:3px 6px;width:190px;" autofocus>
+  </label>
+  <label>Reported by
+    <select name="user" style="padding:3px 6px;">
+      <option value="">anyone</option>
+      {% for u in users %}<option value="{{ u }}" {{ 'selected' if u==f_user }}>{{ u }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Topic
+    <select name="topic" style="padding:3px 6px;">
+      <option value="">any</option>
+      {% for t in topics %}<option value="{{ t }}" {{ 'selected' if t==f_topic }}>{{ t }}</option>{% endfor %}
+    </select>
+  </label>
+  <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" name="bumped" value="1" {{ 'checked' if f_bumped }}> priority only</label>
+  <button class="btn btn-ghost btn-sm">Filter</button>
+  {% if f_q or f_user or f_topic or f_bumped %}<a href="/reports?view={{ view }}" style="color:var(--mid);">clear</a>
+  <span style="color:var(--mid);">{{ items|length }} match{{ 'es' if items|length != 1 else '' }}</span>{% endif %}
+</form>
+{% endif %}
+
+{% if not items %}
+<div class="alert alert-info">&#10003;
+  {% if view == 'validate' %}Nothing is waiting for verification.
+  {% elif view == 'active' %}No open reports.
+  {% else %}No reports here.{% endif %}
+</div>
+{% else %}
+<datalist id="topic-options">{% for t in topics %}<option value="{{ t }}">{% endfor %}</datalist>
+<div style="display:grid;gap:14px;">
+{% for r in items %}
+{% set closed = r.status in ('Verified', 'Resolved') %}
+{# id = the landing spot after any button on this card (report #89): the POST
+   redirects back to #report-<id> so you keep your place instead of being
+   thrown to the top of the page. scroll-margin keeps the card clear of the
+   sticky chrome when the browser jumps to it. #}
+{# A sub-issue (#68) is indented under its parent and carries its parent's
+   letter — the family sorts as one thread, so the indent always lines up
+   directly beneath the report it came out of. #}
+<div class="card" id="report-{{ r.id }}" style="scroll-margin-top:70px;{% if r.parent %}margin-left:26px;{% endif %}border-left:4px solid {% if r.status=='Dev-resolved' %}#43A047{% elif r.status=='In progress' %}var(--blue){% elif closed %}#ccc{% else %}var(--orange){% endif %};{% if closed %}opacity:.75;{% endif %}">
+  <div class="card-body">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:260px;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:.75rem;">
+          <span style="color:var(--mid);font-weight:600;">{% if r.child_label %}{{ r.child_label }} <span style="font-weight:400;">(#{{ r.id }})</span>{% else %}#{{ r.id }}{% endif %}</span>
+          {% if r.parent %}<a href="?view=all&q={{ r.parent.id }}#report-{{ r.parent.id }}" style="background:var(--pale);color:var(--navy);border:1px solid var(--light-blue);border-radius:8px;padding:1px 8px;text-decoration:none;" title="{{ r.parent.summary }}">&#8627; part of #{{ r.parent.id }}</a>{% endif %}
+          {% if r.status=='Dev-resolved' %}<span style="background:#43A047;color:#fff;border-radius:8px;padding:1px 8px;">Dev-resolved — please verify</span>
+          {% elif r.status=='In progress' %}<span style="background:var(--blue);color:#fff;border-radius:8px;padding:1px 8px;">In progress</span>
+          {% elif r.status=='Verified' %}<span style="background:#888;color:#fff;border-radius:8px;padding:1px 8px;">&#10003; Verified</span>
+          {% elif r.status=='Resolved' %}<span style="background:#888;color:#fff;border-radius:8px;padding:1px 8px;">Resolved (legacy)</span>
+          {% else %}<span style="background:var(--orange);color:#fff;border-radius:8px;padding:1px 8px;">Open</span>{% endif %}
+          {% if r.priority %}<span style="background:var(--red);color:#fff;border-radius:8px;padding:1px 8px;" title="Priority-bumped — sorts first">&#11014; Priority</span>{% endif %}
+          {% if r.bounced_at %}<span style="background:#7B1FA2;color:#fff;border-radius:8px;padding:1px 8px;" title="Checked {{ r.bounced_at }} — not yet resolved">&#8617; Bounced</span>{% endif %}
+          {# #89's bounce: this card would normally have left the list on that
+             click (verified, in the validate view) — it is held one more render
+             so the page lands here instead of jumping to the top. #}
+          {% if just_id and r.id == just_id %}<span style="background:var(--navy);color:#fff;border-radius:8px;padding:1px 8px;" title="Held here so you keep your place — it leaves this view on the next refresh">&#10003; just now</span>{% endif %}
+          {% if r.topic %}<a href="/reports?view={{ view if view != 'page' else 'active' }}&topic={{ r.topic|urlencode }}" style="background:var(--pale);color:var(--navy);border:1px solid var(--light-blue);border-radius:8px;padding:1px 8px;text-decoration:none;" title="Show this topic's issues">&#128193; {{ r.topic }}</a>{% endif %}
+        </div>
+        {% if r.ai_summary %}<div style="font-size:.85rem;font-style:italic;color:var(--navy);margin-bottom:4px;">&#10024; {{ r.ai_summary }}</div>{% endif %}
+        <div style="font-size:.95rem;white-space:pre-wrap;">{{ r.description }}</div>
+        <div style="font-size:.8rem;color:var(--mid);margin-top:8px;">
+          &#128100; <strong>{{ r.user or '—' }}</strong> &nbsp;&middot;&nbsp; {{ r.created_at }}
+          {% if r.record_ref %}&nbsp;&middot;&nbsp; record <strong>{{ r.record_ref }}</strong>{% endif %}
+        </div>
+        {% if r.page_url %}<div style="font-size:.78rem;color:var(--mid);margin-top:2px;">Page: <a href="{{ r.page_url }}" style="color:var(--blue);">{{ r.page_url }}</a></div>{% endif %}
+
+        {% if r.children %}
+        <div style="margin-top:8px;font-size:.8rem;background:var(--pale);border-radius:6px;padding:7px 10px;">
+          <strong>{{ r.children|length }} sub-issue{{ '' if r.children|length == 1 else 's' }}</strong>
+          &mdash; each verified on its own:
+          <div style="margin-top:4px;display:grid;gap:2px;">
+            {% for k in r.children %}
+            <div><a href="#report-{{ k.id }}" style="color:var(--blue);font-weight:600;">{{ k.label }}</a>
+              <span style="color:var(--mid);">({{ k.status }})</span> {{ k.summary }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if r.resolution and not closed %}
+        <div style="margin-top:8px;background:#E8F5E9;border:1px solid #A5D6A7;border-radius:6px;padding:8px 12px;">
+          <div style="font-size:.75rem;font-weight:700;color:#2E7D32;">&#128295; What dev did &amp; what to check</div>
+          <div style="font-size:.85rem;white-space:pre-wrap;">{{ r.resolution.text }}</div>
+          <div style="font-size:.72rem;color:var(--mid);margin-top:2px;">{{ r.resolution.author }} &middot; {{ r.resolution.created_at }}</div>
+        </div>
+        {% endif %}
+
+        <div style="font-size:.8rem;color:var(--mid);margin-top:6px;">
+          {% if r.dev_notes %}&#128295; Dev activity: {{ r.dev_notes|length }} note(s), last {{ r.dev_notes[-1].created_at }}
+          {% else %}&#128295; No dev work yet{% endif %}
+        </div>
+
+        {% if r.notes %}
+        <details style="margin-top:4px;" {% if r.status=='Dev-resolved' and view=='validate' %}open{% endif %}>
+          <summary style="font-size:.8rem;color:var(--mid);cursor:pointer;">&#128172; {{ r.notes|length }} note(s)</summary>
+          <div style="margin:6px 0 0 8px;display:grid;gap:6px;">
+            {% for n in r.notes %}
+            <div style="font-size:.8rem;border-left:3px solid {% if n.kind=='resolution' %}#43A047{% elif n.kind=='bounce' %}#7B1FA2{% elif n.kind=='dev' %}var(--blue){% else %}#ddd{% endif %};padding-left:8px;">
+              <span style="white-space:pre-wrap;">{{ n.text }}</span>
+              <span style="color:var(--mid);font-size:.72rem;"> — {{ n.author or '—' }}{% if n.kind not in ('note','status') %} ({{ n.kind }}){% endif %} &middot; {{ n.created_at }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+
+        <form method="POST" action="/reports/{{ r.id }}/note" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+          <input type="text" name="text" placeholder="Add a note…" style="flex:1;max-width:420px;padding:4px 8px;font-size:.82rem;border:1px solid #ccc;border-radius:5px;">
+          <button class="btn btn-ghost btn-sm">Add note</button>
+        </form>
+
+        {% set ctx = r.context_obj %}
+        {% if ctx.js_errors %}
+        <details style="margin-top:6px;"><summary style="font-size:.8rem;color:var(--red);cursor:pointer;font-weight:600;">&#9888; {{ ctx.js_errors|length }} JavaScript error(s)</summary>
+          <ul style="font-size:.75rem;color:#a00;font-family:monospace;margin:4px 0 0 16px;">{% for e in ctx.js_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+        {% if ctx.recent_activity %}
+        <details style="margin-top:4px;"><summary style="font-size:.8rem;color:var(--mid);cursor:pointer;">Recent activity on this record</summary>
+          <ul style="font-size:.75rem;color:var(--mid);margin:4px 0 0 16px;">{% for a in ctx.recent_activity %}<li>{{ a.when }} &mdash; {{ a.action }}{% if a.detail %} ({{ a.detail }}){% endif %} &mdash; {{ a.user }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+        {% if ctx.browser %}<div style="font-size:.72rem;color:#aaa;margin-top:4px;">{{ ctx.screen }} &middot; {{ ctx.browser }}</div>{% endif %}
+        {% if ctx.screenshot_path %}
+        <div style="margin-top:8px;">
+          <a href="#" onclick="openPdf('/reports/{{ r.id }}/screenshot','Screenshot — report #{{ r.id }}');return false;" title="Click to enlarge">
+            <img src="/reports/{{ r.id }}/screenshot" alt="Screenshot of the page when reported"
+                 style="max-width:260px;max-height:160px;border:1px solid #ddd;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15);">
+          </a>
+        </div>
+        {% endif %}
+      </div>
+
+      <div style="text-align:right;display:grid;gap:6px;justify-items:end;">
+        {% if not closed %}
+        <form method="POST" action="/reports/{{ r.id }}/status" style="margin:0;">
+          <input type="hidden" name="status" value="Verified">
+          <button class="btn btn-success btn-sm" title="I checked — it really is fixed">&#10003; Verified — it works</button>
+        </form>
+        {% if r.status=='Dev-resolved' %}
+        <form method="POST" action="/reports/{{ r.id }}/bounce" style="margin:0;display:flex;gap:4px;justify-content:flex-end;">
+          <input type="text" name="text" placeholder="what you saw (optional)" style="width:150px;padding:3px 6px;font-size:.75rem;border:1px solid #ccc;border-radius:5px;">
+          <button class="btn btn-sm" style="background:#7B1FA2;color:#fff;" title="Verification failed — send it back to dev">&#8617; Checked, not yet resolved</button>
+        </form>
+        {% endif %}
+        <form method="POST" action="/reports/{{ r.id }}/priority" style="margin:0;">
+          {% if r.priority %}
+          <input type="hidden" name="priority" value="0">
+          <button class="btn btn-ghost btn-sm" title="Back to normal priority">&#11015; Normal priority</button>
+          {% else %}
+          <input type="hidden" name="priority" value="1">
+          <button class="btn btn-ghost btn-sm" title="Bump — sorts first everywhere">&#11014; Bump priority</button>
+          {% endif %}
+        </form>
+        <details style="font-size:.78rem;">
+          <summary style="cursor:pointer;color:var(--mid);">&#128193; Set topic</summary>
+          <form method="POST" action="/reports/{{ r.id }}/topic" style="display:flex;gap:4px;margin-top:4px;">
+            <input type="text" name="topic" value="{{ r.topic or '' }}" list="topic-options" placeholder="group label" style="width:130px;padding:3px 6px;font-size:.75rem;border:1px solid #ccc;border-radius:5px;">
+            <button class="btn btn-ghost btn-sm">Save</button>
+          </form>
+        </details>
+        {# #68's bounce: "reports like this should be separated into their own
+           issues. 68a, 68b, etc." One line per ask; the parent keeps its own
+           status and gains a note listing what came out of it. #}
+        {% if not r.parent %}
+        <details style="font-size:.78rem;">
+          <summary style="cursor:pointer;color:var(--mid);">&#9986; Split into sub-issues</summary>
+          <form method="POST" action="/reports/{{ r.id }}/split" style="margin-top:4px;text-align:left;">
+            <textarea name="parts" id="parts-{{ r.id }}" rows="4" placeholder="One ask per line — each becomes {{ '#' ~ r.id }}a, {{ '#' ~ r.id }}b, …"
+                      style="width:300px;max-width:100%;padding:5px 7px;font-size:.75rem;border:1px solid #ccc;border-radius:5px;"></textarea>
+            <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="suggestSplit({{ r.id }}, this)"
+                      title="Let the AI propose one line per separate ask — nothing is created until you press Split">&#10024; Suggest</button>
+              <button class="btn btn-ghost btn-sm">Split</button>
+            </div>
+          </form>
+        </details>
+        {% endif %}
+        {# #55's bounce, the same relationship the other way: "There is 3 or so
+           issues open for this. we should merge them." Nothing is closed —
+           they become one thread that sorts and reads together. #}
+        <details style="font-size:.78rem;">
+          <summary style="cursor:pointer;color:var(--mid);">&#128279; {{ 'Move out of #' ~ r.parent.id if r.parent else 'Group with another issue' }}</summary>
+          <form method="POST" action="/reports/{{ r.id }}/group" style="display:flex;gap:4px;margin-top:4px;">
+            <input type="text" name="parent_id" value="{{ r.parent.id if r.parent else '' }}" placeholder="issue #"
+                   style="width:80px;padding:3px 6px;font-size:.75rem;border:1px solid #ccc;border-radius:5px;">
+            <button class="btn btn-ghost btn-sm">{{ 'Save' if r.parent else 'Group' }}</button>
+          </form>
+          <div style="font-size:.7rem;color:var(--mid);margin-top:2px;max-width:220px;">Leave the box empty to take it back out on its own.</div>
+        </details>
+        {% else %}
+        <form method="POST" action="/reports/{{ r.id }}/status" style="margin:0;">
+          <input type="hidden" name="status" value="Open">
+          <button class="btn btn-ghost btn-sm">Reopen</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+<script>
+function suggestSplit(id, btn){
+  var box = document.getElementById('parts-' + id);
+  var was = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Reading…';
+  fetch('/reports/' + id + '/split_suggest')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var lines = (d && d.lines) || [];
+      if(lines.length){ box.value = lines.join('\n'); box.rows = Math.max(4, lines.length + 1); }
+      else { box.placeholder = 'No separate asks found — split it by hand if you disagree.'; }
+    })
+    .catch(function(){ box.placeholder = 'Could not reach the AI — split it by hand.'; })
+    .finally(function(){ btn.disabled = false; btn.textContent = was; });
+}
+</script>
+{% endif %}
+{% endblock %}

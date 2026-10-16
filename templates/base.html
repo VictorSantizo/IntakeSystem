@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+{# Report #80: every page named itself "Klick Klack", so browser history and the
+   back-button list were a dozen identical entries. page_titles.py maps the
+   endpoint; a route may pass its own page_title= to render_template. #}
+<title>{{ page_title or 'Klick Klack' }}</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<script>
+  // Apply the saved theme before paint so there's no flash of the default look.
+  (function(){try{var t=localStorage.getItem('klr-theme');if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style>
+  :root { --navy:#1F3864;--blue:#2E75B6;--light-blue:#BDD7EE;--pale:#DEEAF1;--green:#375623;--orange:#ED7D31;--red:#C00000;--yellow:#FFD966;--gray:#F2F2F2;--dark:#333;--mid:#666;--white:#fff; }
+  /* ── Themes (swap accent palette; cards stay light for readability) ─────────── */
+  html[data-theme="hippie"]{ --navy:#6a1b9a;--blue:#c2185b;--light-blue:#e1bee7;--pale:#f3e5f5;--green:#558b2f;--orange:#ff7043;--yellow:#ffd54f; }
+  html[data-theme="hippie"] body{
+    background:
+      radial-gradient(circle at 12% 18%, rgba(255,213,79,.30) 0 12%, transparent 13%),
+      radial-gradient(circle at 88% 12%, rgba(255,112,67,.28) 0 11%, transparent 12%),
+      radial-gradient(circle at 78% 82%, rgba(76,201,240,.28) 0 14%, transparent 15%),
+      radial-gradient(circle at 20% 88%, rgba(194,24,91,.22) 0 13%, transparent 14%),
+      linear-gradient(135deg,#f7f0ff,#eafff6);
+  }
+  html[data-theme="rockstar"]{ --navy:#161118;--blue:#e91e63;--light-blue:#f8bbd0;--pale:#fde7ef;--green:#388e3c;--orange:#ffb300;--yellow:#ffd54f;--red:#d50000; }
+  html[data-theme="rockstar"] body{ background:linear-gradient(135deg,#e9e6ea,#fafafa 60%,#fff); }
+  html[data-theme="rockstar"] .card-header,html[data-theme="rockstar"] nav{
+    background:linear-gradient(90deg,#161118,#2b2030); border-bottom:2px solid var(--orange);
+  }
+  html[data-theme="rockstar"] .kpi{ border-top-color:var(--orange); }
+  html[data-theme="coastal"]{ --navy:#01579b;--blue:#0288d1;--light-blue:#b3e5fc;--pale:#e1f5fe;--green:#00897b;--orange:#ff8a65;--yellow:#ffe082; }
+  html[data-theme="coastal"] body{ background:linear-gradient(180deg,#e8f6fd 0%,#f3fbff 40%,#fbf7ef 100%); }
+  /* theme picker in the nav */
+  nav .theme-pick{
+    background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.3);
+    border-radius:6px;font-size:.78rem;padding:3px 6px;margin-left:14px;cursor:pointer;outline:none;
+  }
+  nav .theme-pick option{color:#222;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;background:#f0f2f5;color:var(--dark);min-height:100vh;}
+  nav{background:var(--navy);color:#fff;display:flex;align-items:center;padding:0 24px;height:56px;box-shadow:0 2px 8px rgba(0,0,0,.3);}
+  nav .brand{font-size:1.1rem;font-weight:bold;letter-spacing:.5px;margin-right:32px;}
+  nav a{color:rgba(255,255,255,.75);text-decoration:none;padding:0 14px;height:56px;display:flex;align-items:center;font-size:.9rem;transition:background .15s;}
+  nav a:hover,nav a.active{color:#fff;background:rgba(255,255,255,.12);}
+  nav .badge{background:var(--orange);color:#fff;border-radius:10px;padding:1px 7px;font-size:.75rem;margin-left:6px;}
+  nav .spacer{flex:1;}nav .nav-date{font-size:.8rem;color:rgba(255,255,255,.6);}
+  nav .nav-sep{width:1px;height:22px;background:rgba(255,255,255,.18);margin:0 6px;flex:none;}
+  nav .goto-form{margin:0 8px;}
+  /* Account menu (report #79) — a <details> dressed as a nav item. */
+  nav .usermenu{position:relative;margin-left:16px;}
+  nav .usermenu>summary{list-style:none;cursor:pointer;color:rgba(255,255,255,.85);font-size:.85rem;padding:5px 10px;border-radius:5px;border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;gap:6px;}
+  nav .usermenu>summary::-webkit-details-marker{display:none;}
+  nav .usermenu>summary:hover,nav .usermenu[open]>summary{background:rgba(255,255,255,.15);color:#fff;}
+  nav .usermenu-admin{background:var(--orange);color:#fff;border-radius:8px;padding:0 6px;font-size:.7rem;}
+  nav .usermenu-caret{font-size:.7rem;opacity:.8;}
+  nav .usermenu-panel{position:absolute;right:0;top:44px;min-width:190px;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:6px 0;z-index:60;}
+  nav .usermenu-panel a{display:flex;height:auto;padding:9px 14px;color:var(--dark);font-size:.88rem;}
+  nav .usermenu-panel a:hover,nav .usermenu-panel a.active{background:var(--pale);color:var(--navy);}
+  nav .usermenu-out{border-top:1px solid #eee;margin-top:4px;padding-top:10px !important;color:var(--mid) !important;}
+  nav .goto-form input{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:6px;color:#fff;font-family:Consolas,Menlo,monospace;font-size:.85rem;padding:5px 10px;width:120px;transition:width .15s,background .15s;}
+  nav .goto-form input::placeholder{color:rgba(255,255,255,.45);font-family:inherit;}
+  nav .goto-form input:focus{background:rgba(255,255,255,.22);width:165px;outline:none;}
+  /* Record-number chip — the one visual token for YYMMDD-NNN everywhere. */
+  .recno{font-family:Consolas,Menlo,monospace;background:var(--pale);color:var(--navy);border:1px solid var(--light-blue);border-radius:5px;padding:1px 7px;font-size:.85em;font-weight:600;letter-spacing:.3px;white-space:nowrap;text-decoration:none;}
+  a.recno:hover{background:var(--light-blue);}
+  .recno.copied{background:#2E7D32;color:#fff;border-color:#2E7D32;}
+  .page{max-width:1400px;margin:0 auto;padding:24px;}
+  h1{font-size:1.5rem;color:var(--navy);margin-bottom:4px;}
+  .subtitle{color:var(--mid);font-size:.9rem;margin-bottom:20px;}
+  .card{background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.1);}
+  .card-header{background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px 8px 0 0;font-weight:bold;font-size:1rem;}
+  .card-body{padding:20px;}
+  .kpi-row{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:24px;}
+  .kpi{background:#fff;border-radius:8px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.1);border-top:4px solid var(--blue);}
+  .kpi.orange{border-color:var(--orange);}.kpi.green{border-color:#70AD47;}.kpi.purple{border-color:#7030A0;}
+  .kpi-label{font-size:.78rem;color:var(--mid);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+  .kpi-value{font-size:2rem;font-weight:bold;color:var(--navy);line-height:1;}
+  .table-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:.87rem;}
+  th{background:var(--blue);color:#fff;padding:10px 12px;text-align:left;white-space:nowrap;font-weight:600;}
+  td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle;}
+  tr:hover td{background:var(--pale);}tr:nth-child(even) td{background:#fafafa;}tr:nth-child(even):hover td{background:var(--pale);}
+  .badge-status{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.78rem;font-weight:600;white-space:nowrap;}
+  .s-pending{background:#FFF0D0;color:#995500;}.s-in-progress{background:#EDE7F6;color:#5E35B1;}
+  .s-processed{background:#E8F5E9;color:#2E7D32;}.s-paid{background:#E3F2FD;color:#1565C0;}
+  .s-filed{background:#ECEFF1;color:#455A64;}.s-on-hold{background:#FFF3E0;color:#BF360C;}
+  .s-filed{background:#E0E0E0;color:#424242;}.s-on-hold{background:#FDECEA;color:#B71C1C;}
+  .conf-high{color:#2E7D32;font-weight:bold;}.conf-medium{color:#E65100;font-weight:bold;}.conf-low{color:var(--red);font-weight:bold;}.conf-none{color:var(--mid);}
+  .form-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+  .form-group{display:flex;flex-direction:column;gap:5px;}.form-group.full{grid-column:1/-1;}
+  label{font-size:.85rem;font-weight:600;color:var(--mid);}
+  input,select,textarea{padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;font-family:Arial;color:var(--dark);outline:none;transition:border .15s;}
+  input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(46,117,182,.2);}
+  textarea{min-height:70px;resize:vertical;}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border:none;border-radius:6px;font-size:.9rem;font-weight:600;cursor:pointer;text-decoration:none;transition:opacity .15s,transform .1s;}
+  .btn:hover{opacity:.88;transform:translateY(-1px);}.btn-primary{background:var(--blue);color:#fff;}
+  .btn-success{background:#43A047;color:#fff;}.btn-orange{background:var(--orange);color:#fff;}
+  .btn-ghost{background:transparent;color:var(--blue);border:1.5px solid var(--blue);}.btn-sm{padding:4px 12px;font-size:.8rem;}
+  .filter-bar{background:#fff;border-radius:8px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;}
+  .filter-bar input,.filter-bar select{min-width:140px;}
+  .alert{padding:14px 18px;border-radius:8px;margin-bottom:16px;font-size:.9rem;}
+  .alert-info{background:var(--pale);color:var(--navy);border-left:4px solid var(--blue);}
+  .alert-warning{background:#FFF8E1;color:#7A5800;border-left:4px solid var(--yellow);}
+  .text-extract{background:#f8f8f8;border:1px solid #ddd;border-radius:6px;padding:12px;font-size:.8rem;font-family:monospace;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:#555;}
+  .amount{font-weight:bold;color:var(--navy);}.amount.income{color:#2E7D32;}
+  /* ── Hover-to-highlight document viewer ─────────────────────────────────────
+     Server-rendered page images + positioned boxes; hovering a [data-hl] field
+     lights up where that value sits in the document. */
+  .doc-viewer{position:relative;height:100%;overflow-y:auto;background:#494c50;border-radius:0 0 8px 8px;padding:10px;}
+  .doc-viewer .doc-loading{color:#ddd;text-align:center;padding:40px 10px;font-size:.85rem;}
+  .doc-page-wrap{position:relative;margin:0 auto 12px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.45);}
+  .doc-page{display:block;width:100%;height:auto;}
+  .hl{position:absolute;pointer-events:none;box-sizing:content-box;padding:3px;margin:-3px;border:2px solid transparent;border-radius:3px;transition:background .15s,border-color .15s;}
+  .hl.hl-on{background:rgba(255,213,79,.5);border-color:var(--orange);}
+  [data-hl].hl-avail{border-radius:6px;transition:background .15s;}
+  [data-hl].hl-avail:hover{background:rgba(255,213,79,.22);}
+  [data-hl].hl-avail .hl-pin{font-size:.72rem;color:var(--orange);margin-left:5px;font-weight:normal;}
+  @media(max-width:768px){.kpi-row{grid-template-columns:repeat(2,1fr);}.page{padding:12px;}}
+</style>
+{% include "_chrome_head_js.html" %}
+</head>
+<body>
+<nav>
+  <span class="brand">&#127968; Klick Klack</span>
+  {# Workflow order (report #53): bring paper in → check it → pay bills →
+     look things up. Thin separators mark the groups; every page stays one
+     click away — this is a re-ordering, not a re-design. #}
+  <a href="/" data-kk="nav-dashboard" class="{{ 'active' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+  <span class="nav-sep"></span>
+  <a href="/scan" data-kk="nav-scan" class="{{ 'active' if request.endpoint=='scanflow.scan_page' else '' }}">&#128424;&#65039; Scan</a>
+  {# A document you are looking for is in one of two places and only two
+     (report #76, Joshua): still in Needs Review, or logged in the Intake Log.
+     They sit side by side so the pair reads as the one question it is. #}
+  <a href="/review" data-kk="nav-review" class="{{ 'active' if request.endpoint in ['review_queue','review_item'] else '' }}">
+    Needs Review {% if pending_count is defined and pending_count > 0 %}<span class="badge js-pending-badge">{{ pending_count }}</span>{% endif %}
+  </a>
+  <a href="/log" data-kk="nav-log" class="{{ 'active' if request.endpoint=='log' else '' }}">Intake Log</a>
+  {# The third place a document can be (after Review and the Log): the file
+     cabinet itself, browsed as the real folder tree with record chips. #}
+  <a href="/files" data-kk="nav-files" class="{{ 'active' if request.endpoint=='files_view' else '' }}">&#128193; Files</a>
+  {# The fourth place to look (2026-08-10, Nancy): the emails themselves —
+     every office mailbox, searchable, whether or not a document came of it. #}
+  <a href="/mail" data-kk="nav-mail" class="{{ 'active' if request.endpoint in ['mail_page','mail_view'] else '' }}">&#128231; Mail</a>
+  <span class="nav-sep"></span>
+  <a href="/bills" data-kk="nav-bills" class="{{ 'active' if request.endpoint in ['bills','vendor_bills','expected_bills_page'] else '' }}">&#128176; Bills</a>
+  <a href="/catchup" data-kk="nav-catchup" class="{{ 'active' if request.endpoint=='catchup' else '' }}">&#9200; Catch Up</a>
+  {# Karen's Questions is Karen's own to-answer list — everyone else reaches
+     /karen by URL if they ever need it, but only her bar shows it. Expected
+     left the bar 7/29 (Joshua): it lives as a Bills-page button + the
+     dashboard tile that appears when an expected bill is late. Settings and
+     Ops Reports left the bar 8/6 (report #79) for the account menu on the
+     right — admin housekeeping is not part of the daily workflow. #}
+  {% if session.get('user') == 'Karen' %}<span class="nav-sep"></span><a href="/karen" data-kk="nav-karen" class="{{ 'active' if request.endpoint=='karen_page' else '' }}">&#128203; Karen's Questions</a>{% endif %}
+  <span class="spacer"></span>
+  <form action="/goto" method="get" class="goto-form" title="Jump to a record &mdash; press / from anywhere">
+    <input type="text" name="q" id="goto-box" placeholder="Go to # &nbsp;( / )" autocomplete="off">
+  </form>
+  <span class="nav-date" id="nav-clock"></span>
+  {% if session.get('user') %}
+  {% if my_pass_count and my_pass_count > 0 %}<a href="/#passed-to-you" style="font-size:.8rem;margin-left:16px;color:#FFE082;" title="Records teammates passed to you — see the dashboard">&#128221; For you <span class="badge" style="background:#B8860B;">{{ my_pass_count }}</span></a>{% endif %}
+  {% if is_admin %}<a href="/reports" class="{{ 'active' if request.endpoint=='reports' else '' }}" style="font-size:.8rem;margin-left:16px;" title="Issue reports">&#128027; Reports{% if open_report_count and open_report_count > 0 %} <span class="badge" style="background:var(--red);">{{ open_report_count }}</span>{% endif %}</a>{% endif %}
+  <a href="#" onclick="openReport();return false;" style="color:rgba(255,255,255,.75);font-size:.8rem;margin-left:16px;" title="Report a problem">&#128030; Report a problem</a>
+  {# The Classy/Colorful look switch — always visible top right, both looks. #}
+  {% include "_skin_switch.html" %}
+  {# Account menu (report #79, Joshua: "tuck Settings under a drop-down when
+     you click your username, just like every other app out there"). Your own
+     page, the admin housekeeping pages and Sign out live here; the daily
+     workflow stays in the bar on the left. <details> so it works with no
+     JavaScript at all — the script below only closes it on an outside click. #}
+  <details class="usermenu" data-kk="usermenu">
+    <summary title="Your account">&#128100; {{ session.user }}{% if is_admin %} <span class="usermenu-admin">admin</span>{% endif %} <span class="usermenu-caret">&#9662;</span></summary>
+    <div class="usermenu-panel">
+      <a href="/account" data-kk="nav-account" class="{{ 'active' if request.endpoint=='account' else '' }}">&#128100; My account</a>
+      {% if is_admin %}
+      <a href="/settings" data-kk="nav-settings" class="{{ 'active' if request.path.startswith('/settings') else '' }}">&#9881; Settings</a>
+      <a href="/ops-reports" data-kk="nav-ops-reports" class="{{ 'active' if request.path.startswith('/ops-reports') else '' }}" title="The server's scheduled data-side reports (Harvest, Reconciliation, Big Picture)">&#128202; Ops Reports</a>
+      {% endif %}
+      <a href="/logout" class="usermenu-out">Sign out</a>
+    </div>
+  </details>
+  {% endif %}
+</nav>
+{# Open-issue indicator (report #68): a quiet admin-only chip on any page that
+   has unverified issue reports filed about it. Click-through opens those
+   reports with the add-note / verify / bounce actions. Suppressed on /reports
+   itself (the whole page is the reports view). #}
+{% if page_issue_ids and request.endpoint != 'reports' %}
+<div style="text-align:right;padding:4px 24px 0;">
+  <a href="/reports?path={{ request.path|urlencode }}"
+     title="Issue report(s) were filed on this page — click to read, add a note, or mark resolved"
+     style="display:inline-block;font-size:.75rem;color:var(--mid);background:var(--gray);border:1px solid #ddd;border-radius:10px;padding:1px 10px;text-decoration:none;">
+    &#128027; {{ page_issue_ids|length }} open issue{{ 's' if page_issue_ids|length > 1 else '' }} about this page</a>
+</div>
+{% endif %}
+<div class="page">{% block content %}{% endblock %}</div>
+{% include "_chrome_page_js.html" %}
+
+{% include "_chrome_shared.html" %}
+</body></html>

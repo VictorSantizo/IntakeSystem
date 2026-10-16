@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1>Intake Log</h1><a href="/entry/new" class="btn btn-primary">+ New Entry</a>
+</div>
+<p class="subtitle">All logged mail and email &mdash; filter, search, and update status</p>
+<form method="GET" class="filter-bar">
+  {% if filters.processed_by %}<input type="hidden" name="processed_by" value="{{ filters.processed_by }}">{% endif %}
+  {% if filters.important %}<input type="hidden" name="important" value="{{ filters.important }}">{% endif %}
+  <div class="form-group"><label>Search</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Vendor, property, notes&hellip;"></div>
+  <div class="form-group"><label>Entity</label><select name="entity_code"><option value="">All Entities</option>{% for e in cfg.entities %}<option value="{{ e.code }}" {{ 'selected' if filters.entity_code==e.code else '' }}>{{ e.code }} &ndash; {{ e.name }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Property</label><select name="property_code"><option value="">All Properties</option>{% for p in cfg.properties %}<option value="{{ p.code }}" {{ 'selected' if filters.property_code==p.code else '' }}>{{ p.code }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Doc Type</label><select name="doc_type"><option value="">All Types</option>{% for dt in doc_type_choices(filters.doc_type) %}<option value="{{ dt }}" {{ 'selected' if filters.doc_type==dt else '' }}>{{ dt }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Status</label><select name="status"><option value="">All Statuses (Filed hidden)</option>{% for st in ['Pending','In Progress','Processed','Paid','Filed','On Hold'] %}<option value="{{ st }}" {{ 'selected' if filters.status==st else '' }}>{{ st }}</option>{% endfor %}<option value="all" {{ 'selected' if filters.status=='all' else '' }}>Everything incl. Filed</option></select></div>
+  <div class="form-group"><label>From</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+  <div class="form-group"><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+  <div style="display:flex;gap:8px;align-items:flex-end;"><button type="submit" class="btn btn-primary">Filter</button><a href="/log" class="btn btn-ghost">Clear</a></div>
+</form>
+<div class="card"><div class="card-body" style="padding:0;">
+  <div style="padding:12px 20px;background:var(--gray);border-bottom:1px solid #ddd;font-size:.85rem;color:var(--mid);">{{ entries|length }} result{{ 's' if entries|length != 1 else '' }}</div>
+  <div class="table-wrap"><table class="sortable">
+    {# Mail Type, Processed By, and Notes were dropped from the scan line —
+       they're still on the record's detail view (one click via the row or
+       Edit), just not competing for space in a table meant to be scannable.
+       Bill Code stays: Karen's filing system is built around those codes. #}
+    <thead><tr><th>Record #</th><th>Date Rcvd</th><th>Entity</th><th>Property</th><th>Doc Type</th><th>Bill Code</th><th>Vendor</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+    {% for e in entries %}<tr style="cursor:pointer;" onclick="window.location.href='/entry/{{ e.id }}/view{{ nav_qs }}'" title="Click to view this record">
+      <td><a class="recno" href="/entry/{{ e.id }}/view{{ nav_qs }}" onclick="event.stopPropagation()">{{ e.record_no or '#' ~ e.id }}</a></td><td style="white-space:nowrap;">{{ e.date_received }}</td>
+      <td><code>{{ e.entity_code or ('&mdash;'|safe) }}</code></td><td><code>{{ e.property_code or ('&mdash;'|safe) }}</code></td><td>{{ e.doc_type or ('&mdash;'|safe) }}</td>
+      <td style="font-size:.8rem;"><code>{{ e.bill_type_code or ('&mdash;'|safe) }}</code></td><td>{% if e.important %}<span style="color:var(--orange);" title="Flagged important">&#9873;</span> {% endif %}{{ e.vendor or ('&mdash;'|safe) }}</td>
+      <td class="amount {{ 'income' if e.doc_type=='Income' else '' }}">{% if e.amount %}${{ "{:,.2f}".format(e.amount) }}{% else %}&mdash;{% endif %}</td>
+      <td style="white-space:nowrap;font-size:.82rem;">{{ e.due_date or ('&mdash;'|safe) }}</td>
+      <td onclick="event.stopPropagation()"><select class="status-select" data-id="{{ e.id }}" style="border:none;background:none;font-size:.8rem;cursor:pointer;">{% for st in ['Pending','In Progress','Processed','Paid','Filed','On Hold'] %}<option value="{{ st }}" {{ 'selected' if e.status==st else '' }}>{{ st }}</option>{% endfor %}</select></td>
+      <td onclick="event.stopPropagation()"><a href="/entry/{{ e.id }}/edit{{ nav_qs }}" class="btn btn-ghost btn-sm">Edit</a></td>
+    </tr>{% else %}<tr><td colspan="11" style="text-align:center;padding:40px;color:#999;">No entries match your filters.</td></tr>{% endfor %}
+    </tbody></table></div></div></div>
+<script>
+// Picking "Paid" here opens the record's payment form instead of silently
+// flipping the status — that form is the only place a paid date/amount/method
+// actually gets recorded, so setting Paid from a bare dropdown left records
+// with no payment details at all.
+document.querySelectorAll('.status-select').forEach(sel=>{
+  var original=sel.value;
+  sel.addEventListener('change',function(){
+    if(this.value==='Paid'){ window.location.href='/entry/'+this.dataset.id+'/view?pay=1'; return; }
+    fetch(`/entry/${this.dataset.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:this.value})});
+    original=this.value;
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rolodex — Klick Klack</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+  <style>
+    :root{
+      --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+      --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+      --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+      --cork:#c49a6c; --cork-dark:#a87f52;
+      --red:#b03a2e; --blue-ink:#2e5aa8; --green:#2e6e3e;
+      --sticky:#f7e896; --sticky-edge:#d9c65a;
+      --aging:#faf3d9; --stale:#f3e9c0; --stale-fold:#e2d49e;
+      --brass:#c9a84c; --brass-dark:#96782a;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f;
+        --cork:#a37e51; --cork-dark:#87653c; }
+    }
+    :root[data-theme="dark"]{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f;
+      --cork:#a37e51; --cork-dark:#87653c; }
+    :root[data-theme="light"]{ --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+      --cork:#c49a6c; --cork-dark:#a87f52; }
+
+    body{ background:var(--room); color:var(--room-ink);
+      font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+    .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+    .mono{ font-family:Consolas,"Courier New",monospace; }
+    a{ color:inherit; }
+    a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+    @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+    /* ── nav ── */
+    .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+      gap:18px; padding:10px 22px; flex-wrap:wrap; }
+    .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+    .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+    .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+    .nav .tabs .off{ color:#aebad2; }
+    .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+    .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+    .nav-right{ margin-left:auto; color:#dbe4f5; font-size:.85rem; }
+
+    /* ── main layout ── */
+    .rolodex-wrap{ max-width:1180px; margin:14px auto 26px; padding:0 20px; display:flex; gap:20px; }
+    .rolodex-panel{ width:200px; flex:none; }
+    .rolodex-card-area{ flex:1; min-width:0; }
+
+    /* ── letter panel ── */
+    .panel-heading{ font-size:.7rem; font-weight:700; color:var(--room-ink-soft); letter-spacing:.15em;
+      text-transform:uppercase; margin-bottom:12px; }
+    .letter-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:20px; }
+    .letter-btn{ background:var(--paper); border:1px solid var(--paper-edge); color:var(--ink);
+      text-decoration:none; font-size:.8rem; font-weight:600; padding:8px; text-align:center;
+      cursor:pointer; }
+    .letter-btn:hover{ background:#fff; }
+    .letter-btn.active{ background:#c96f2e; color:#fff; border-color:#c96f2e; }
+
+    .vendor-list{ list-style:none; margin:0; padding:0; }
+    .vendor-list li{ margin-bottom:2px; }
+    .vendor-list a{ display:block; padding:4px 6px; color:var(--room-ink); text-decoration:none;
+      font-size:.75rem; }
+    .vendor-list a:hover{ background:rgba(0,0,0,0.05); }
+    .vendor-list a.selected{ background:var(--paper-edge); }
+    .vendor-list .count{ color:var(--pencil); font-size:.7rem; }
+
+    /* ── card ── */
+    .card-container{ position:relative; }
+    /* Back card decoration — rotated slightly behind */
+    .card-back{ position:absolute; top:8px; left:8px; right:-8px; bottom:-8px;
+      border:2px solid var(--paper-edge); background:var(--paper);
+      transform:rotate(-1.5deg); z-index:-1; }
+    .card{ background:var(--paper); border:2px solid var(--paper-edge); color:var(--ink);
+      padding:24px; position:relative; z-index:1; }
+
+    .card-empty{ font-style:italic; color:var(--pencil); }
+
+    .card-header{ display:flex; align-items:baseline; gap:16px; margin-bottom:12px; }
+    .card-vendor{ font-family:Rockwell,"Rockwell Nova",Georgia,serif;
+      font-size:1.5rem; font-weight:700; color:var(--ink); }
+    .card-radar{ background:var(--green); color:#fff; font-size:.65rem; font-weight:700;
+      padding:4px 10px; border-radius:3px; }
+    .card-expect{ font-size:.8rem; }
+    .card-expect a{ color:var(--blue-ink); text-decoration:underline; text-underline-offset:2px; }
+
+    .card-kind{ font-size:.8rem; color:var(--pencil); margin-bottom:16px; }
+
+    .card-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px 20px; margin-bottom:16px;
+      font-size:.8rem; }
+    .card-grid-item{ }
+    .card-grid-label{ font-size:.7rem; color:var(--pencil); margin-bottom:4px; font-weight:600; }
+    .card-grid-value{ font-family:Consolas,"Courier New",monospace; font-size:.8rem; }
+    .card-grid-value.empty{ color:var(--pencil); }
+
+    .card-divider{ border-top:2px dashed var(--paper-edge); margin:16px 0; }
+
+    .card-payments{ margin:16px 0; }
+    .card-payments-heading{ font-size:.7rem; font-weight:700; color:var(--pencil);
+      text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+    .payment-row{ display:flex; gap:12px; font-family:Consolas,"Courier New",monospace;
+      font-size:.75rem; line-height:1.6; }
+    .payment-row span{ flex:1; }
+    .payment-date{ min-width:70px; }
+    .payment-method{ min-width:60px; }
+    .payment-amount{ min-width:80px; text-align:right; }
+    .payment-status{ color:var(--green); font-weight:600; min-width:40px; }
+    .card-payments-empty{ font-style:italic; color:var(--pencil); font-size:.8rem; }
+
+    .card-unpaid{ color:var(--red); font-size:.8rem; margin:12px 0 0; }
+
+    .card-actions{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+    .card-actions a{ background:none; border:1px solid var(--wood); color:var(--wood-dark);
+      padding:6px 12px; font-size:.75rem; text-decoration:none; cursor:pointer; }
+    .card-actions a:hover{ background:#fff; }
+
+    /* ── responsive ── */
+    @media (max-width:700px){
+      .rolodex-wrap{ flex-direction:column; gap:0; }
+      .rolodex-panel{ width:100%; margin-bottom:20px; }
+      .letter-grid{ grid-template-columns:repeat(auto-fit,minmax(30px,1fr)); }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <div class="tabs">
+    <a class="sib" href="/desk">the desk</a>
+    <a class="sib" href="/cabinet">file cabinet</a>
+    <span class="on">rolodex</span>
+    <a class="sib" href="/intray">in-tray</a>
+    <a class="sib" href="/calendar">wall calendar</a>
+    <a class="sib" href="/board">corkboard</a>
+    <a class="sib" href="/tray">tray gauge</a>
+  </div>
+  <span class="nav-right">{{ total_vendors }} vendors on file</span>
+</nav>
+
+{% if msg %}
+<div style="max-width:1180px;margin:14px auto 0;padding:0 20px;">
+  <div style="background:var(--paper);border:2px solid var(--paper-edge);border-radius:4px;
+              padding:10px 16px;font-size:.85rem;color:var(--ink);">{{ msg }}</div>
+</div>
+{% endif %}
+
+{% if is_admin and vendor_clusters %}
+<div style="max-width:1180px;margin:14px auto 0;padding:0 20px;">
+  <details class="card" style="padding:16px 22px;">
+    <summary style="cursor:pointer;font-weight:700;color:var(--wood-dark);font-size:.9rem;">
+      &#128269; {{ vendor_clusters|length }} possible duplicate vendor group{{ 's' if vendor_clusters|length != 1 }}
+      &mdash; one-time cleanup
+    </summary>
+    <div style="margin-top:12px;font-size:.8rem;color:var(--pencil);">
+      Likely the same company under a different spelling/punctuation. Nothing merges until you click — pick the
+      correct spelling (defaults to whichever has the most documents) and fold the rest into it.
+    </div>
+    {% for group in vendor_clusters %}
+    <form method="post" action="/rolodex/merge_vendor"
+          style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px;padding-top:12px;
+                 border-top:1px dashed var(--paper-edge);"
+          onsubmit="return confirm('Merge the other spelling(s) below into the selected one? This changes every record that used them.');">
+      <input type="hidden" name="csrf_token" value="{{ session.csrf }}">
+      <select name="new_vendor" style="font-size:.8rem;padding:5px 7px;border:1px solid var(--paper-edge);
+              background:var(--paper);color:var(--ink);max-width:340px;">
+        {% for m in group %}
+        <option value="{{ m.vendor }}">{{ m.vendor }} ({{ m.cnt }})</option>
+        {% endfor %}
+      </select>
+      {% for m in group %}
+      <input type="hidden" name="old_vendor" value="{{ m.vendor }}">
+      {% endfor %}
+      <span style="font-size:.78rem;color:var(--pencil);">also seen as:</span>
+      {% for m in group[1:] %}
+      <span style="font-size:.75rem;background:var(--paper-edge);padding:3px 8px;border-radius:3px;">
+        {{ m.vendor }} ({{ m.cnt }})</span>
+      {% endfor %}
+      <button type="submit" class="letter-btn" style="padding:5px 12px;">Merge this group</button>
+    </form>
+    {% endfor %}
+  </details>
+</div>
+{% endif %}
+
+<div class="rolodex-wrap">
+  <!-- LEFT PANEL: Letter index and vendor list -->
+  <div class="rolodex-panel">
+    <div class="panel-heading">Jump To</div>
+
+    <div class="letter-grid">
+      {% for l in letters %}
+        {% if l == letter %}
+          <span class="letter-btn active">{{ l }}</span>
+        {% else %}
+          <a href="/rolodex?letter={{ l }}" class="letter-btn">{{ l }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <ul class="vendor-list">
+      {% for v in in_letter %}
+        <li>
+          <a href="/rolodex?letter={{ letter }}&vendor={{ v.vendor|urlencode }}"
+             {% if v.vendor == vendor %}class="selected"{% endif %}>
+            {{ v.vendor }}<br><span class="count">({{ v.cnt }})</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- MAIN CARD AREA -->
+  <div class="rolodex-card-area">
+    <div class="card-container">
+      <!-- Back card decoration -->
+      <div class="card-back"></div>
+
+      <!-- Front card -->
+      <div class="card">
+        {% if card %}
+          <!-- Card Header -->
+          <div class="card-header">
+            <span class="card-vendor">{{ card.vendor }}</span>
+            {% if card.on_radar %}
+              <span class="card-radar">on the radar</span>
+            {% else %}
+              <span class="card-expect">
+                <a href="/expected">expect this bill →</a>
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Card Kind -->
+          {% if card.kind %}
+            <div class="card-kind">{{ card.kind }}</div>
+          {% endif %}
+
+          <!-- Card Grid: Facts -->
+          <div class="card-grid">
+            <!-- Account # -->
+            <div class="card-grid-item">
+              <div class="card-grid-label">Account #</div>
+              <div class="card-grid-value">
+                {% if card.accounts %}
+                  {% for acct in card.accounts %}
+                    {% if loop.first %}<span>{% endif %}{{ acct }}<br>{% if loop.last %}</span>{% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="empty">—</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Typical Amount -->
+            <div class="card-grid-item">
+              <div class="card-grid-label">Typical Amount</div>
+              <div class="card-grid-value">
+                {{ card.typical or "—" }}
+              </div>
+            </div>
+
+            <!-- Routes To -->
+            <div class="card-grid-item">
+              <div class="card-grid-label">Routes To</div>
+              <div class="card-grid-value">
+                {% if card.route_entity or card.route_prop %}
+                  {{ card.route_entity }}{% if card.route_entity and card.route_prop %} › {% endif %}{{ card.route_prop }}
+                {% else %}
+                  <span class="empty">—</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Usual Due Date -->
+            <div class="card-grid-item">
+              <div class="card-grid-label">Usual Due Date</div>
+              <div class="card-grid-value">
+                {% if card.usual_day %}
+                  {{ card.usual_day }} of the month
+                {% else %}
+                  <span class="empty">—</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div class="card-divider"></div>
+
+          <!-- Payments -->
+          <div class="card-payments">
+            <div class="card-payments-heading">Last Few Payments</div>
+            {% if card.payments %}
+              {% for p in card.payments %}
+                <div class="payment-row">
+                  <span class="payment-date">{{ p.date }}</span>
+                  <span class="payment-method">{{ p.method }}</span>
+                  <span class="payment-amount">${{ '{:,.2f}'.format(p.amount) }}</span>
+                  <span class="payment-status">paid</span>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="card-payments-empty">no payments recorded yet</div>
+            {% endif %}
+          </div>
+
+          <!-- Unpaid Bills Alert -->
+          {% if card.unpaid > 0 %}
+            <div class="card-unpaid">
+              {{ card.unpaid }} unpaid bill{% if card.unpaid != 1 %}s{% endif %} right now
+            </div>
+          {% endif %}
+
+          <!-- Action Buttons -->
+          <div class="card-actions">
+            <a href="/bills/vendor/{{ card.vendor|urlencode }}">
+              View all {{ card.total_bills }} bills →
+            </a>
+            <a href="/log?search={{ card.vendor|urlencode }}">
+              Find in the log →
+            </a>
+          </div>
+
+        {% else %}
+          <!-- Empty State -->
+          <div class="card-empty">
+            the rolodex is empty — vendors appear as mail gets logged.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

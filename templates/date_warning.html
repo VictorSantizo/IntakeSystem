@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Check the Date{{ 's' if warnings|length > 1 else '' }}</h1>
+<p class="subtitle">A date on this entry is far enough from today that it's usually a misread — record numbers and filing folders are built from it and never renumber.</p>
+
+<div class="alert" style="background:#FDE8E8;color:var(--red);border-left:4px solid var(--red);margin-bottom:20px;">
+  {% for w in warnings %}<div style="margin:4px 0;">&#9888;&#65039; <strong>{{ w }}</strong></div>{% endfor %}
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap;">
+  <form method="POST" action="{{ action }}">
+    {% for key, value in form_data.items(multi=True) %}
+      {% if key != 'date_ok' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}
+    {% endfor %}
+    <input type="hidden" name="date_ok" value="1">
+    <button type="submit" class="btn btn-orange">&#10003; The date{{ 's are' if warnings|length > 1 else ' is' }} correct &mdash; log it</button>
+  </form>
+  {% if back_url %}
+  <a href="{{ back_url }}" class="btn btn-ghost">&larr; Go back &amp; fix the date</a>
+  {% else %}
+  <a href="#" onclick="history.back();return false;" class="btn btn-ghost">&larr; Go back &amp; fix the date</a>
+  {% endif %}
+</div>
+{% endblock %}

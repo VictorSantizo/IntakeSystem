@@ -1,0 +1,48 @@
+{# Head-level app machinery shared by BOTH looks (classic base.html and
+   new/base.html — the 2026-08-05 "new look" second view). CSRF injection and
+   the js-error buffer are load-bearing: every POST form and fetch depends on
+   them. Extracted verbatim from base.html; edit here once, never fork
+   per-look copies. #}
+<script>
+  // ── CSRF: every state-changing request must carry the session token. ────────
+  // Injected centrally so individual forms/fetch calls never handle it:
+  //  - a hidden csrf_token input is added to every POST form (at load, plus a
+  //    capture-phase submit listener for any form created later);
+  //  - a fetch() wrapper adds the X-CSRF-Token header to non-GET requests.
+  // The server side is csrf_protect() in app.py.
+  window.__CSRF__ = {{ (session.get('csrf') or '')|tojson }};
+  (function(){
+    function addToken(f){
+      try{
+        if(f && (f.method||'').toLowerCase()==='post' && !f.querySelector('input[name=csrf_token]')){
+          var i=document.createElement('input');
+          i.type='hidden'; i.name='csrf_token'; i.value=window.__CSRF__;
+          f.appendChild(i);
+        }
+      }catch(e){}
+    }
+    document.addEventListener('submit', function(e){ addToken(e.target); }, true);
+    document.addEventListener('DOMContentLoaded', function(){
+      document.querySelectorAll('form').forEach(addToken);
+    });
+    var _fetch = window.fetch;
+    window.fetch = function(input, init){
+      try{
+        var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        if(method !== 'GET' && method !== 'HEAD'){
+          init = init || {};
+          var h = new Headers(init.headers || (input && input.headers) || undefined);
+          h.set('X-CSRF-Token', window.__CSRF__);
+          init.headers = h;
+        }
+      }catch(e){}
+      return _fetch.call(this, input, init);
+    };
+  })();
+
+  // Buffer recent JavaScript errors so a problem report can include them.
+  window.__jsErrors = [];
+  function __logErr(m){try{window.__jsErrors.push(String(m).slice(0,300));if(window.__jsErrors.length>10)window.__jsErrors.shift();}catch(e){}}
+  window.addEventListener('error', function(e){__logErr((e.message||'error')+' @ '+(e.filename||'')+':'+(e.lineno||''));});
+  window.addEventListener('unhandledrejection', function(e){__logErr('promise: '+((e.reason&&e.reason.message)||e.reason||''));});
+</script>

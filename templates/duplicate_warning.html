@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_dup_compare.html" import dup_compare, dup_summary %}
+{% block content %}
+<h1>Possible Duplicate Detected</h1>
+<p class="subtitle">This document looks like it may already be logged. Review the matches below before continuing.</p>
+
+<div class="alert alert-warning" style="margin-bottom:20px;">
+  &#9888;&#65039; Found <strong>{{ dupes|length }}</strong> possible duplicate{{ 's' if dupes|length != 1 else '' }} in the intake log.
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">Matching Entries</div>
+  <div class="card-body" style="padding:0;">
+    <table>
+      <thead><tr><th>Record #</th><th>Date</th><th>Vendor</th><th>Amount</th><th>Property</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+      {% for d in dupes %}
+      <tr>
+        <td><a class="recno" href="/entry/{{ d.id }}/view" target="_blank">{{ d.record_no or '#' ~ d.id }}</a></td>
+        <td>{{ d.date_received }}</td>
+        <td>{{ d.vendor or '—' }}</td>
+        <td class="amount">{% if d.amount %}${{ "{:,.2f}".format(d.amount) }}{% else %}—{% endif %}</td>
+        <td><code>{{ d.property_code or '—' }}</code></td>
+        <td><span class="badge-status {{ sc.get(d.status,'s-pending') }}">{{ d.status }}</span></td>
+        <td style="white-space:nowrap;">
+          <a href="/entry/{{ d.id }}/view" class="btn btn-ghost btn-sm" target="_blank">View</a>
+          <form method="POST" action="/review/{{ scan_id }}/attach/{{ d.id }}{{ filter_qs or '' }}" style="display:inline;margin:0;"
+                onsubmit="return confirm('Attach this scan to record {{ d.record_no or '#' ~ d.id }} as a duplicate copy? It will NOT create a new entry.')">
+            <button type="submit" class="btn btn-success btn-sm">&#128206; Attach as copy</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if dup_cmps %}
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">Side-by-side: how this document compares</div>
+  <div class="card-body">
+    {% for d in dupes %}{% set cmp = dup_cmps[d.id] %}{% if cmp %}
+    <details style="margin-bottom:10px;"{% if loop.first %} open{% endif %}>
+      <summary style="cursor:pointer;font-weight:600;">vs record {{ d.record_no or '#' ~ d.id }} {{ d.vendor or '' }}: {{ dup_summary(cmp) }}</summary>
+      <div style="margin-top:8px;">{{ dup_compare(cmp, "This document (as entered)", "Record " ~ (d.record_no or '#' ~ d.id), "/review/" ~ scan_id ~ "/compare/" ~ d.id ~ (filter_qs or '')) }}</div>
+    </details>
+    {% endif %}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div style="display:flex;gap:12px;flex-wrap:wrap;">
+  <form method="POST" action="/review/{{ scan_id }}/confirm?force=1&vendor_ok=1{% if filter_qs %}&{{ filter_qs[1:] }}{% endif %}">
+    {% for key, value in form_data.items(multi=True) %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <button type="submit" class="btn btn-orange">Log Anyway (Not a Duplicate)</button>
+  </form>
+  <a href="/review/{{ scan_id }}{{ filter_qs or '' }}" class="btn btn-ghost">&#8592; Go Back &amp; Review</a>
+  <form method="POST" action="/review/{{ scan_id }}/skip{{ filter_qs or '' }}"
+        onsubmit="return confirm('Discard this scan? The file is moved to a _Skipped folder (not deleted) and will not come back on its own.')">
+    <button type="submit" class="btn btn-sm" style="background:#c00;color:#fff;">&#128465; Discard This Scan</button>
+  </form>
+</div>
+{% endblock %}

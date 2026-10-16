@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+  <div style="min-width:0;">
+    <h1 style="font-size:1.25rem;overflow:hidden;text-overflow:ellipsis;">{{ m.subject or '(no subject)' }}</h1>
+    <p class="subtitle">One email from the office mail archive</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a href="/mail/{{ m.id }}/print" target="_blank" class="btn btn-primary" data-kk="mail-print"
+       title="Printable page: header, the attachment list (or 'Attachments: None'), then the message">&#128424; Print</a>
+    <a href="/mail{% if back_qs %}?{{ back_qs }}{% endif %}" class="btn btn-ghost">&larr; All mail</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px;"><div class="card-body">
+  <table style="font-size:.9rem;border-collapse:collapse;">
+    <tr><td style="color:var(--mid);padding:3px 14px 3px 0;white-space:nowrap;">Mailbox</td>
+        <td><span style="background:{{ acct_colors.get(m.account_name, '#546E7A') }};color:#fff;border-radius:10px;padding:2px 10px;font-size:.76rem;">{{ m.account_name or '?' }}</span>
+            <span style="font-size:.78rem;color:var(--mid);">&nbsp;this copy came from this inbox</span></td></tr>
+    <tr><td style="color:var(--mid);padding:3px 14px 3px 0;">From</td><td>{{ m.from_addr or '—' }}</td></tr>
+    <tr><td style="color:var(--mid);padding:3px 14px 3px 0;">To</td><td>{{ m.to_addr or '—' }}</td></tr>
+    {% if m.cc_addr %}<tr><td style="color:var(--mid);padding:3px 14px 3px 0;">Cc</td><td>{{ m.cc_addr }}</td></tr>{% endif %}
+    <tr><td style="color:var(--mid);padding:3px 14px 3px 0;">Date</td><td>{{ m.date_raw or m.date_iso or '—' }}</td></tr>
+  </table>
+</div></div>
+
+<div class="card" style="margin-bottom:16px;"><div class="card-body">
+  <div style="font-weight:700;color:var(--navy);font-size:.9rem;margin-bottom:8px;">&#128206; Attachments{% if not m.attachments %}: None{% endif %}</div>
+  {% for a in m.attachments %}
+  <div style="display:flex;align-items:center;gap:10px;padding:7px 0;font-size:.85rem;border-bottom:1px solid #f3f3f3;flex-wrap:wrap;">
+    <span style="font-weight:600;">{{ a.filename }}</span>
+    <span style="color:var(--mid);font-size:.78rem;">{{ (a.size / 1024) | round(0) | int }} KB</span>
+    {% if a.resend_count and a.resend_count > 1 %}
+    <a href="/mail?sha={{ a.sha256 }}" style="background:#B71C1C;color:#fff;border-radius:10px;padding:2px 9px;font-size:.72rem;text-decoration:none;" title="The sender keeps sending this file — click to see exactly those emails">&#8635; arrived under {{ a.resend_count }} separate emails</a>
+    {% endif %}
+    {% if a.match and a.match.kind == 'record' and a.match.important %}
+    <span style="color:var(--orange);cursor:help;font-size:1rem;" title="{{ a.match.important_reason or 'Flagged — needs a look' }}">&#9873;</span>
+    {% endif %}
+    {% if a.match and a.match.kind == 'record' %}
+      <span style="background:var(--navy);color:#fff;border-radius:10px;padding:2px 9px;font-size:.72rem;">{{ a.match.doc_type or 'Filed' }}</span>
+      <a class="recno" href="/entry/{{ a.match.entry_id }}/view">{{ a.match.record_no }}</a>
+      <span style="flex:1;min-width:200px;color:var(--mid);font-size:.76rem;overflow-wrap:anywhere;">{{ a.match.unc }}</span>
+      <a href="#" onclick="openPdf('/entry/{{ a.match.entry_id }}/pdf','{{ a.match.record_no }}');return false;" class="btn btn-ghost btn-sm">Open</a>
+      {% if a.match.appended %}
+      <span style="color:#2E7D32;font-size:.78rem;" title="The email you are reading is already part of the filed PDF">&#10003; email at the back of the filed PDF</span>
+      {% else %}
+      <form method="POST" action="/mail/{{ m.id }}/append/{{ a.match.entry_id }}?back={{ back_qs|urlencode }}" style="margin:0;">
+        <button type="submit" class="btn btn-ghost btn-sm" data-kk="mail-append"
+                title="Rewrites the filed PDF with this email's pages (every mailbox copy) at the end — same thing filing does for new email documents">&#128206;&#65039; Put this email at the back of the filed PDF</button>
+      </form>
+      {% endif %}
+    {% elif a.match and a.match.kind == 'queue' %}
+      <span style="background:var(--orange);color:#fff;border-radius:10px;padding:2px 9px;font-size:.72rem;">In review</span>
+      <a href="/review/{{ a.match.sid }}" style="color:var(--blue);">Needs Review queue #{{ a.match.sid }}</a>
+      <span style="color:var(--mid);font-size:.78rem;">no record yet &mdash; the email attaches when it&rsquo;s confirmed</span>
+    {% elif a.blob %}
+      <span style="color:var(--mid);font-size:.78rem;">not filed as a document &mdash; a copy from the email is kept</span>
+      <a href="/mail/attachment/{{ a.sha256 }}" target="_blank" class="btn btn-ghost btn-sm"
+         title="The archive's own copy — identical attachments on any email share this one file">Open</a>
+    {% else %}
+      <span style="color:var(--mid);font-size:.78rem;">not saved in the system &mdash; no copy kept yet (the background sweep fetches copies for older mail)</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div></div>
+
+<div class="card"><div class="card-body">
+  <div style="font-weight:700;color:var(--navy);font-size:.9rem;margin-bottom:8px;">Message</div>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:.88rem;margin:0;max-height:520px;overflow:auto;">{{ m.body or '(no text body stored)' }}</pre>
+</div></div>
+{% endblock %}

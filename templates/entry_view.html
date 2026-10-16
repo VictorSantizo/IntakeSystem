@@ -1,0 +1,583 @@
+{% extends "base.html" %}
+{% block content %}
+{% set st_class = 's-' + (entry.status or 'Pending').lower().replace(' ', '-') %}
+{# Report #27 (Joshua): only a Bill can be paid. A bank statement, a receipt or
+   a blank lease showing "Mark Paid" is nonsense — those get "Done" instead. #}
+{% set is_payable = (entry.doc_type or '') == 'Bill' %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  <div>
+    <h1 style="margin-bottom:2px;">{{ entry.vendor or 'Record' }} <span class="recno" onclick="copyRecNo(this)" style="font-size:1.05rem;vertical-align:3px;cursor:copy;" title="Record number &mdash; click to copy">{{ entry.record_no or '#' ~ entry.id }}</span></h1>
+    <span class="subtitle">
+      <span class="badge-status {{ st_class }}">{{ entry.status }}</span>
+      &nbsp;&middot;&nbsp; {{ entry.doc_type or 'Document' }}
+      {% if entry.important %}&nbsp;&middot;&nbsp; <span style="background:var(--orange);color:#fff;border-radius:10px;padding:2px 9px;font-size:.75rem;font-weight:700;" {% if entry.important_reason %}title="{{ entry.important_reason }}"{% endif %}>&#9873; Important</span>{% if entry.important_reason %} <span style="font-size:.8rem;color:#7A4A00;">{{ entry.important_reason }}</span>{% endif %}{% endif %}
+      {% if entry.ai_confidence %}&nbsp;&middot;&nbsp; <span class="conf-{{ entry.ai_confidence.lower() }}">AI: {{ entry.ai_confidence }}</span>{% endif %}
+    </span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="{{ back_url or '/log' }}" class="btn btn-ghost btn-sm">&larr; Back to {{ back_label or 'Log' }}</a>
+    {% if prev_id %}<a href="/entry/{{ prev_id }}/view{{ nav_qs }}" class="btn btn-ghost btn-sm" title="Previous record in this list">&larr; Prev</a>{% endif %}
+    {% if next_id %}<a href="/entry/{{ next_id }}/view{{ nav_qs }}" class="btn btn-ghost btn-sm" title="Next record in this list">Next &rarr;</a>{% endif %}
+    <form method="POST" action="/entry/{{ entry.id }}/important{{ nav_qs }}" style="margin:0;">
+      {% if entry.important %}
+      <button type="submit" class="btn btn-sm" style="background:var(--orange);color:#fff;" title="Remove the important flag — it leaves the dashboard's needs-attention list">&#9873; Flagged &mdash; remove</button>
+      {% else %}
+      <button type="submit" class="btn btn-ghost btn-sm" title="Flag this record as important — it joins the dashboard's needs-attention list until filed or unflagged">&#9873; Flag important</button>
+      {% endif %}
+    </form>
+    {% if entry.status not in ['Paid', 'Filed'] %}
+      {% if is_payable %}
+    <button type="button" class="btn btn-sm" style="background:#2e7d32;color:#fff;" data-kk="mark-paid" onclick="togglePay()">&#10003; Mark Paid</button>
+      {% else %}
+    {# Report #27: a bank statement, a receipt or a blank lease is not something
+       you pay. Non-bills get "Done" — it files the record and clears it off the
+       open lists. If one really IS a bill, Record Actions still has "Turn into
+       bill", which brings Mark Paid back. #}
+    <form method="POST" action="/entry/{{ entry.id }}/done{{ nav_qs }}" style="margin:0;">
+      <button type="submit" class="btn btn-sm" style="background:#2e7d32;color:#fff;" data-kk="mark-done"
+              title="This is a {{ (entry.doc_type or 'document')|lower }}, not a bill — mark it handled and file it away">&#10003; Done</button>
+    </form>
+      {% endif %}
+    {% endif %}
+    <button type="button" class="btn btn-ghost btn-sm" data-kk="pass-to" onclick="togglePassForm()" title="Hand this record to a teammate with a note — it lands on their dashboard">&#10148; Pass to&hellip;</button>
+    <a href="/entry/{{ entry.id }}/edit{{ nav_qs }}" class="btn btn-primary btn-sm">&#9998; Edit</a>
+  </div>
+</div>
+
+{# ── Pass to a teammate: the sticky-note handoff, in-app ── #}
+<form id="passForm" method="POST" action="/entry/{{ entry.id }}/pass"
+      style="display:none;margin-bottom:14px;background:#FFF8DC;border-left:4px solid #E6C200;border-radius:8px;padding:12px 16px;">
+  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;">Pass to<br>
+      <select name="to_user" required style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+        <option value="" disabled selected>Choose&hellip;</option>
+        {% for n in staff_names %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+      </select>
+    </label>
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;flex:1;min-width:220px;">Note (what needs doing)<br>
+      <input type="text" name="note" maxlength="500" placeholder="e.g. mark this paid — payment was on receipt 260616-002"
+             style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;width:100%;">
+    </label>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn-sm" style="background:#B8860B;color:#fff;">&#10148; Pass it</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="togglePassForm()">Cancel</button>
+    </div>
+  </div>
+</form>
+<script>
+function togglePassForm(){
+  var f=document.getElementById('passForm');
+  var show=(f.style.display==='none'||!f.style.display);
+  f.style.display=show?'block':'none';
+  if(show){f.querySelector('[name=to_user]').focus();}
+}
+</script>
+
+{% set open_passes = entry_passes | selectattr('status', 'equalto', 'Open') | list %}
+{% for p in open_passes %}
+<div style="background:#FFF8DC;border-left:4px solid #E6C200;border-radius:8px;padding:10px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+  <div style="font-size:.88rem;">
+    &#128221; <strong>{{ p.from_user or 'Someone' }}</strong> passed this to <strong>{{ p.to_user }}</strong>
+    <span style="color:var(--mid);font-size:.8rem;">({{ p.created_at }})</span>
+    {% if p.note %}<div style="margin-top:3px;color:#6b5900;">&ldquo;{{ p.note }}&rdquo;</div>{% endif %}
+  </div>
+  <form method="POST" action="/pass/{{ p.id }}/done" style="margin:0;">
+    <button type="submit" class="btn btn-ghost btn-sm" title="Mark this handoff handled">&#10003; Done</button>
+  </form>
+</div>
+{% endfor %}
+
+{% if is_payable and entry.status not in ['Paid', 'Filed'] %}
+{# Tier 1 #19 — quick Paid: inline payment form right on the record, no Edit round-trip. #}
+<form id="payForm" method="post" action="/entry/{{ entry.id }}/pay" enctype="multipart/form-data"
+      style="display:none;margin-bottom:16px;background:var(--pale);border-left:4px solid #2e7d32;border-radius:8px;padding:14px 16px;">
+  <div style="font-weight:700;color:#2e7d32;margin-bottom:10px;font-size:.9rem;">&#10003; Record Payment</div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;">Paid Date<br>
+      <input type="date" name="paid_date" value="{{ today }}" required
+             style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+    </label>
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;">Amount Paid<br>
+      <input type="text" name="paid_amount" inputmode="decimal" placeholder="0.00"
+             value="{{ '%.2f'|format(entry.amount) if entry.amount is not none else '' }}"
+             style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;width:120px;">
+    </label>
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;">Method<br>
+      <select name="payment_method" onchange="payMethodChange(this.value)"
+              style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+        <option value="">—</option>
+        {% for m in ['Check','ACH','Credit Card','Phone'] %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+      </select>
+    </label>
+    <label id="pay-check-wrap" style="font-size:.78rem;color:var(--mid);font-weight:600;display:none;">Check #<br>
+      <input type="text" name="check_number" placeholder="e.g. 13386"
+             style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;width:110px;">
+    </label>
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;flex:1;min-width:140px;">Note<br>
+      <input type="text" name="payment_note" placeholder="confirmation #, memo…"
+             style="margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;width:100%;">
+    </label>
+    <label style="font-size:.78rem;color:var(--mid);font-weight:600;" title="Optional — the receipt uploads when you click Save Payment">Attach Receipt (optional)<br>
+      <input type="file" name="receipt" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx"
+             style="margin-top:4px;font-size:.82rem;max-width:230px;">
+    </label>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn-sm" style="background:#2e7d32;color:#fff;">Save Payment</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="togglePay()">Cancel</button>
+    </div>
+  </div>
+
+  {% if split_entities %}
+  {# Tier 3 #2 — this bill's properties span multiple entities; split the payment. #}
+  <div id="split-panel" style="margin-top:12px;border-top:1px dashed #cbd5c0;padding-top:10px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+      <strong style="color:#2e7d32;font-size:.85rem;">&#9878;&#65039; Split across entities</strong>
+      <label style="font-size:.78rem;color:var(--mid);font-weight:600;">Method
+        <select id="split-method" onchange="recalcSplit()" style="padding:4px 6px;border:1px solid #ccc;border-radius:6px;font-size:.85rem;">
+          <option value="units">By units</option>
+          <option value="even">Even</option>
+          <option value="manual">Manual</option>
+        </select>
+      </label>
+      <span id="split-remainder" style="font-size:.8rem;"></span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      {% for ent, wt in split_entities %}
+      <div style="display:flex;align-items:center;gap:8px;font-size:.85rem;">
+        <input type="hidden" name="split_entity" value="{{ ent }}">
+        <code style="min-width:84px;">{{ ent }}</code>
+        <span style="color:var(--mid);font-size:.78rem;min-width:64px;" title="unit weight">{{ wt }} unit{{ 's' if wt != 1 else '' }}</span>
+        <span>$</span>
+        <input type="text" name="split_amount" class="split-amt" data-weight="{{ wt }}" inputmode="decimal"
+               oninput="onSplitInput()" style="width:110px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</form>
+<script>
+function togglePay(){
+  var f=document.getElementById('payForm');
+  var show=(f.style.display==='none'||!f.style.display);
+  f.style.display=show?'block':'none';
+  if(show){var a=f.querySelector('[name=paid_amount]');if(a){a.focus();a.select();}}
+}
+// Arriving with ?pay=1 (e.g. from a "Paid" pick in a status dropdown elsewhere)
+// opens the payment form directly, so recording a payment always captures a
+// date/amount/method instead of silently flipping the status.
+(function(){
+  if(new URLSearchParams(window.location.search).get('pay')==='1'){
+    var f=document.getElementById('payForm');
+    if(f) togglePay();
+  }
+})();
+function payMethodChange(v){
+  var w=document.getElementById('pay-check-wrap');
+  if(w) w.style.display=(v==='Check')?'':'none';
+}
+// ── #2 split helpers ────────────────────────────────────────────────────────
+function _round2(x){ return Math.round(x*100)/100; }
+function _payTotal(){
+  var a=document.querySelector('#payForm [name=paid_amount]');
+  var v=parseFloat(((a&&a.value)||'').replace(/[,$]/g,''));
+  return isNaN(v)?0:v;
+}
+function recalcSplit(){
+  var panel=document.getElementById('split-panel'); if(!panel) return;
+  var method=document.getElementById('split-method').value;
+  var rows=Array.prototype.slice.call(panel.querySelectorAll('.split-amt'));
+  if(method!=='manual'){
+    var total=_payTotal();
+    var weights=rows.map(function(r){ return method==='units'?(parseFloat(r.dataset.weight)||0):1; });
+    var sum=weights.reduce(function(a,b){return a+b;},0) || rows.length;
+    var alloc=weights.map(function(w){ return _round2(total*w/sum); });
+    var diff=_round2(total - alloc.reduce(function(a,b){return a+b;},0));  // stray penny
+    if(Math.abs(diff)>=0.01){
+      var maxi=0; for(var i=1;i<weights.length;i++){ if(weights[i]>weights[maxi]) maxi=i; }
+      alloc[maxi]=_round2(alloc[maxi]+diff);
+    }
+    rows.forEach(function(r,i){ r.value=alloc[i].toFixed(2); });
+  }
+  updateSplitRemainder();
+}
+function onSplitInput(){ var m=document.getElementById('split-method'); if(m) m.value='manual'; updateSplitRemainder(); }
+function updateSplitRemainder(){
+  var panel=document.getElementById('split-panel'); if(!panel) return;
+  var rows=Array.prototype.slice.call(panel.querySelectorAll('.split-amt'));
+  var sum=rows.reduce(function(a,r){ var v=parseFloat((r.value||'').replace(/[,$]/g,'')); return a+(isNaN(v)?0:v); },0);
+  var total=_payTotal(), rem=_round2(total-sum);
+  var el=document.getElementById('split-remainder');
+  if(Math.abs(rem)<0.01){ el.textContent='✓ allocated $'+total.toFixed(2); el.style.color='#2e7d32'; }
+  else { el.textContent='remainder $'+rem.toFixed(2)+' — must be $0.00'; el.style.color='var(--red)'; }
+}
+(function(){
+  var panel=document.getElementById('split-panel'); if(!panel) return;
+  var amt=document.querySelector('#payForm [name=paid_amount]');
+  if(amt) amt.addEventListener('input', recalcSplit);
+  recalcSplit();  // default: By units
+  var form=document.getElementById('payForm');
+  if(form) form.addEventListener('submit', function(e){
+    var rows=Array.prototype.slice.call(panel.querySelectorAll('.split-amt'));
+    var sum=rows.reduce(function(a,r){ var v=parseFloat((r.value||'').replace(/[,$]/g,'')); return a+(isNaN(v)?0:v); },0);
+    if(Math.abs(_round2(_payTotal()-sum))>=0.01){
+      e.preventDefault();
+      alert('The split must add up to the payment amount before saving.');
+    }
+  });
+})();
+</script>
+{% endif %}
+
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+
+{# Twin-bill banners (FAIR Plan #51-vs-#77): the same real-world bill logged
+   more than once — different bytes, so hash dedup can't pair them. #}
+{% if paid_twins and entry.status not in ('Paid', 'Filed') %}
+<div class="alert alert-warning" data-kk="twin-paid-warning">&#9888;&#65039;
+  <strong>This bill may already be paid.</strong>
+  {% for t in paid_twins %}<a href="/entry/{{ t.id }}/view{{ nav_qs }}" style="font-weight:600;">#{{ t.id }}</a>
+  ({{ t.invoice_number or t.vendor or '?' }}{% if t.amount %}, ${{ "{:,.2f}".format(t.amount) }}{% endif %}{% if t.paid_date %}, paid {{ t.paid_date }}{% if t.payment_method %} by {{ t.payment_method }}{% endif %}{% endif %}){{ " · " if not loop.last }}{% endfor %}
+  look{{ 's' if paid_twins|length == 1 }} like the same bill and {{ 'is' if paid_twins|length == 1 else 'are' }} already marked Paid
+  &mdash; check before paying a second time. If it's truly the same bill, fold this record into the paid one on the server:
+  <code>python app.py merge-record {{ entry.id }} {{ paid_twins[0].id }}</code>
+</div>
+{% endif %}
+{% if open_twins %}
+<div class="alert alert-warning" data-kk="twin-open-warning">&#9888;&#65039;
+  <strong>{{ open_twins|length }} other open record{{ 's' if open_twins|length != 1 }} may be this same bill:</strong>
+  {% for t in open_twins %}<a href="/entry/{{ t.id }}/view{{ nav_qs }}" style="font-weight:600;">#{{ t.id }}</a>
+  ({{ t.invoice_number or t.vendor or '?' }}{% if t.amount %}, ${{ "{:,.2f}".format(t.amount) }}{% endif %}, {{ t.status }}){{ " · " if not loop.last }}{% endfor %}
+  {% if entry.status in ('Paid', 'Filed') %}&mdash; this record is paid, so the owed list still counts {{ 'that copy' if open_twins|length == 1 else 'those copies' }} as due.
+  If the payment covers {{ 'it' if open_twins|length == 1 else 'them' }}, fold {{ 'it' if open_twins|length == 1 else 'each one' }} into this record on the server:
+  <code>python app.py merge-record {{ open_twins[0].id }} {{ entry.id }}</code>
+  {% else %}&mdash; the same bill may be logged twice; sort it out before anyone pays it two times.{% endif %}
+</div>
+{% endif %}
+{# The Document File row's Copy path button (reports #92 and #22) is now the
+   app-wide data-copy-path + copyPathButton pair in _chrome_page_js.html: the
+   hidden-textarea fallback for plain HTTP, the "Path Copied" label Joshua
+   asked for, and no path riding an inline onclick argument — that last part is
+   what actually left this button dead. Nothing page-specific is needed here. #}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+
+<div style="position:sticky;top:16px;">
+  <div class="card">
+    <div class="card-header">&#128196; Scanned Document
+      {% if has_pdf %}<span style="float:right;font-weight:normal;font-size:.75rem;opacity:.8;">&#128205; hover a detail to find it in the document</span>{% endif %}</div>
+    <div class="card-body" style="padding:0;height:80vh;">
+      {% if has_pdf %}
+        <div id="doc-viewer" class="doc-viewer"></div>
+      {% else %}
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mid);font-size:.9rem;text-align:center;padding:24px;">
+          No scanned file is available for this record.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card"><div class="card-header">&#128203; Record Details</div><div class="card-body">
+  {% if entry.notice_summary %}
+  <div style="margin-bottom:14px;background:#FFF4E5;border-left:4px solid var(--orange);border-radius:8px;padding:11px 14px;">
+    <div style="font-weight:700;color:#7A4A00;font-size:.85rem;">&#9888;&#65039; Contains a notice</div>
+    <div style="color:#7A4A00;font-size:.9rem;margin-top:3px;">{{ entry.notice_summary }}</div>
+  </div>
+  {% endif %}
+  {% macro field(label, value, hl=None) %}
+    <div style="display:flex;padding:9px 0;border-bottom:1px solid #eee;font-size:.9rem;" {% if hl %}data-hl="{{ hl }}"{% endif %}>
+      <div style="flex:0 0 150px;color:var(--mid);font-weight:600;">{{ label }}</div>
+      <div style="flex:1;color:var(--dark);">{{ value if (value not in (None, '')) else '—' }}</div>
+    </div>
+  {% endmacro %}
+
+  {% if ai_fillable %}
+  <form method="POST" action="/entry/{{ entry.id }}/ai_fill" style="margin-bottom:12px;"
+        onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Reading the document…';">
+    <div style="background:#FFF9E6;border-left:4px solid var(--orange);border-radius:6px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:.88rem;color:#7A4A00;">Some details are blank, but they may be readable right off the document.
+        Filling never changes a value that's already there.</span>
+      <button type="submit" class="btn btn-sm btn-success" data-kk="ai-fill">&#10024; Fill missing details with AI</button>
+    </div>
+  </form>
+  {% endif %}
+  {{ field('Date Received', entry.date_received) }}
+  {{ field('Mail Type', entry.mail_type) }}
+  {{ field('Document Type', entry.doc_type) }}
+  {{ field('Entity', (entry.entity_code ~ ' — ' ~ entry.entity_name) if entry.entity_code else '') }}
+  {{ field('Properties', (entry.property_code ~ ('  (' ~ entry.property_address ~ ')' if entry.property_address else '')) if entry.property_code else '') }}
+  {% if entry_units %}
+  {# Report #20 — the unit shown as its own field instead of buried in Account #. #}
+  {{ field('Unit' ~ ('s' if entry_units|length != 1 else ''),
+           entry_units | map(attribute='unit_code') | join(', ')) }}
+  {% endif %}
+  {{ field('Bill Type', entry.bill_type_code) }}
+  {{ field('Vendor / Sender', entry.vendor, hl='vendor') }}
+  {{ field('Invoice / Statement #', entry.invoice_number, hl='invoice_number') }}
+  {{ field('Account #', entry.account_number, hl='account_number') }}
+  {{ field('Amount', ('$' ~ '{:,.2f}'.format(entry.amount)) if entry.amount is not none else '', hl='amount') }}
+  {{ field('Due Date', entry.due_date, hl='due_date') }}
+  {% set doc_path = entry.filed_path or entry.pdf_path %}
+  <div style="display:flex;padding:9px 0;border-bottom:1px solid #eee;font-size:.9rem;">
+    <div style="flex:0 0 150px;color:var(--mid);font-weight:600;">Document File</div>
+    <div style="flex:1;word-break:break-all;">
+      {% if doc_path %}
+      <span style="font-family:Consolas,monospace;font-size:.8rem;">{{ doc_path|unc }}</span>
+      <button type="button" class="btn btn-ghost btn-sm" data-copy-path="{{ doc_path|unc }}">Copy path</button>
+      {# Report #22 (Joshua): a real "open in File Explorer". The page can't do
+         it (browsers block file:// links), but this desk's scan connector can —
+         the button asks the server, the connector opens Explorer with the
+         document selected. Hidden unless this desk's connector is alive. #}
+      {# The path rides a data attribute, not an inline onclick argument — see
+         the copy-path note above: |tojson does not escape the double quote,
+         so the attribute used to end early and this button never fired. #}
+      <button type="button" class="btn btn-ghost btn-sm" id="open-explorer-btn" style="display:none;"
+              data-kk="open-explorer" data-path="{{ doc_path|unc }}"
+              title="Open this document's folder in File Explorer on this computer">&#128194; Open in Explorer</button>
+      <script>
+      (function(){
+        var eb = document.getElementById('open-explorer-btn');
+        if(!eb) return;
+        eb.addEventListener('click', function(){ openInExplorer(eb, eb.dataset.path); });
+        fetch('/api/desk/status').then(function(r){ return r.json(); }).then(function(d){
+          if(d && d.commands){ eb.style.display=''; }
+        }).catch(function(){});
+      })();
+      function openInExplorer(btn, path){
+        btn.disabled = true; var old = btn.innerHTML; btn.innerHTML = 'Opening&hellip;';
+        fetch('/api/desk/open_explorer', {method:'POST',
+            headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: path})})
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            btn.innerHTML = d.ok ? '&#10003; Opening on this computer' : 'Could not open';
+            setTimeout(function(){ btn.innerHTML = old; btn.disabled = false; }, 2500);
+          })
+          .catch(function(){ btn.innerHTML = 'Could not open';
+            setTimeout(function(){ btn.innerHTML = old; btn.disabled = false; }, 2500); });
+      }
+      </script>
+      {% if has_pdf %}
+      <button type="button" class="btn btn-ghost btn-sm" data-kk="move-doc-toggle"
+              onclick="var f=document.getElementById('move-doc-form');f.style.display=(f.style.display==='none')?'':'none';">Move to&hellip;</button>
+      <form id="move-doc-form" method="POST" action="/entry/{{ entry.id }}/move-file"
+            style="display:none;margin-top:8px;"
+            onsubmit="var b=this.querySelector('button[type=submit]');b.disabled=true;b.textContent='Moving…';">
+        <div style="display:flex;gap:6px;">
+          <input type="text" name="dest_dir" id="move-dest-input" list="move-dest-options" value="{{ move_default|unc }}"
+                 style="flex:1;font-family:Consolas,monospace;font-size:.8rem;padding:6px 8px;box-sizing:border-box;"
+                 placeholder="Folder to move the document into">
+          <button type="button" class="btn btn-ghost btn-sm" data-kk="move-doc-browse"
+                  onclick="openFolderPicker('move-dest-input')">Browse&hellip;</button>
+        </div>
+        <datalist id="move-dest-options">
+          {% for c in move_candidates %}<option value="{{ c|unc }}"></option>{% endfor %}
+        </datalist>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+          <label style="font-size:.78rem;color:var(--mid);display:inline-flex;align-items:center;gap:4px;">
+            <input type="checkbox" name="rename_convention" value="1">
+            rename to the convention name while moving</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+          <button type="submit" class="btn btn-sm btn-primary" data-kk="move-doc-submit"
+                  style="white-space:nowrap;flex-shrink:0;">Move document</button>
+          <span style="font-size:.78rem;color:var(--mid);">Browse, or paste a folder from File Explorer &mdash; any desk's
+            drive letter works. The record and its copies follow the file automatically.</span>
+        </div>
+      </form>
+      {% endif %}
+      {% else %}&mdash;{% endif %}
+    </div>
+  </div>
+  {{ field('Processed By', entry.processed_by) }}
+  {{ field('Notes', entry.notes) }}
+
+  {% if entry.status in ['Paid', 'Filed'] and (entry.paid_date or entry.paid_amount or entry.paid_by) %}
+  <div style="margin-top:16px;background:var(--pale);border-radius:8px;padding:12px 16px;border-left:4px solid #1565C0;">
+    <div style="font-size:.85rem;font-weight:700;color:#1565C0;margin-bottom:6px;">&#10003; Payment Record</div>
+    {{ field('Paid Date', entry.paid_date) }}
+    {{ field('Amount Paid', ('$' ~ '{:,.2f}'.format(entry.paid_amount)) if entry.paid_amount is not none else '') }}
+    {{ field('Method', (entry.payment_method ~ (' #' ~ entry.check_number if entry.check_number else '')) if entry.payment_method else '') }}
+    {{ field('Payment Note', entry.payment_note) }}
+    {{ field('Paid By', entry.paid_by) }}
+  </div>
+  {% endif %}
+
+  {# Report #54 — the entity split shows whenever the bill has one, not only once it's
+     paid. It used to live inside the Payment Record block, so a shared bill that hadn't
+     been paid yet displayed nothing at all. #}
+  {% if payment_splits %}
+  <div style="margin-top:16px;background:#f6faf6;border-radius:8px;padding:12px 16px;border-left:4px solid #2e7d32;">
+    <div style="font-size:.85rem;font-weight:700;color:#2e7d32;margin-bottom:6px;">&#9878;&#65039; Split across entities</div>
+    {% set split_total = payment_splits | map(attribute='amount') | select('!=', None) | sum %}
+    {% for s in payment_splits %}
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e4efe4;font-size:.9rem;">
+      <code>{{ s.entity_code }}</code>
+      <span>${{ '{:,.2f}'.format(s.amount) if s.amount is not none else '—' }}</span>
+    </div>
+    {% endfor %}
+    <div style="display:flex;justify-content:space-between;padding:5px 0 0;font-size:.85rem;font-weight:600;">
+      <span style="color:var(--mid);">Total</span><span>${{ '{:,.2f}'.format(split_total) }}</span>
+    </div>
+    {% if entry.amount is not none and (split_total - entry.amount) | abs > 0.005 %}
+    <div style="margin-top:4px;font-size:.8rem;color:#b00;">
+      Doesn&rsquo;t match the bill amount of ${{ '{:,.2f}'.format(entry.amount) }}.
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if entry.email_from or entry.email_subject or entry.email_body %}
+  {# Tier 4 #14/#17 — the source email, stored + shown with the bill. Gated on
+     the stored email itself, not mail_type (#26): hand-filed pickups and
+     harvested records can carry one too. #}
+  <div style="margin-top:16px;background:#fbfbfd;border:1px solid #e6e6ef;border-radius:8px;padding:12px 16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="font-size:.85rem;font-weight:700;color:var(--navy);">&#9993;&#65039; Source Email{% if entry.email_account %} &mdash; arrived in {{ entry.email_account }}{% endif %}</div>
+      <span style="display:flex;gap:6px;">
+        <a class="btn btn-ghost btn-sm" href="/entry/{{ entry.id }}/packet.pdf" target="_blank" title="One printable PDF: the document with this email behind it — print it and pay off the paper (#55)">&#128424; Print with email</a>
+        <a class="btn btn-ghost btn-sm" href="{{ email_mailto(entry, 'reply') }}" title="Opens your own mail program with a reply started">&#8617; Reply</a>
+        <a class="btn btn-ghost btn-sm" href="{{ email_mailto(entry, 'forward') }}" title="Opens your own mail program with a forward started">&#8618; Forward</a>
+        {% if entry.email_body %}<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('email-modal').style.display='flex'">View full email</button>{% endif %}
+      </span>
+    </div>
+    {{ field('From', entry.email_from) }}
+    {{ field('To', entry.email_to) }}
+    {{ field('Subject', entry.email_subject) }}
+    {{ field('Date', entry.email_date) }}
+  </div>
+  {% endif %}
+
+  {% if attachments %}
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-weight:700;color:var(--navy);font-size:.9rem;">&#128206; Copies on file ({{ attachments|length + 1 }})</span>
+      {% if attachments %}
+      <form method="post" action="/entry/{{ entry.id }}/copies/remove_all{{ nav_qs }}" style="margin:0 0 0 auto;"
+            onsubmit="return confirm('Remove all {{ attachments|length }} duplicate cop{{ 'y' if attachments|length == 1 else 'ies' }}? The primary document and this record stay. Removed copies are moved to a recoverable _Removed Copies folder.');">
+        <button type="submit" class="btn btn-ghost btn-sm" style="color:#b00;">Remove all copies</button>
+      </form>
+      {% endif %}
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:.85rem;border-bottom:1px solid #f3f3f3;">
+      <span style="background:var(--navy);color:#fff;border-radius:10px;padding:2px 9px;font-size:.72rem;">Primary</span>
+      <span style="flex:1;color:var(--mid);">{{ entry.mail_type or 'Original' }}</span>
+      {% if has_pdf %}<a href="#" onclick="openPdf('/entry/{{ entry.id }}/pdf','Document #{{ entry.id }}');return false;" class="btn btn-ghost btn-sm">Open</a>{% endif %}
+    </div>
+    {% for a in attachments %}
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:.85rem;border-bottom:1px solid #f3f3f3;">
+      <span style="background:var(--orange);color:#fff;border-radius:10px;padding:2px 9px;font-size:.72rem;">{{ a.source or 'Copy' }}</span>
+      <span style="flex:1;color:var(--mid);">added by {{ a.added_by or '—' }} &middot; {{ a.added_at }}</span>
+      <a href="#" onclick="openPdf('/attachment/{{ a.id }}/pdf','Copy #{{ a.id }}');return false;" class="btn btn-ghost btn-sm">Open</a>
+      <form method="post" action="/attachment/{{ a.id }}/remove{{ nav_qs }}" style="margin:0;"
+            onsubmit="return confirm('Remove this copy? It is moved to a recoverable _Removed Copies folder.');">
+        <button type="submit" class="btn btn-ghost btn-sm" style="color:#b00;" title="Remove this duplicate copy">Remove</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Tier 4 #4 — attach a scanned/photographed receipt to this bill. Collapsed
+     behind a link — it was an always-expanded file-input form on every record,
+     visible whether or not anyone needed it. #}
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;">
+    <a href="#" onclick="var f=document.getElementById('receipt-form');f.style.display='flex';this.style.display='none';f.querySelector('input[type=file]').click();return false;"
+       style="font-weight:700;color:var(--navy);font-size:.9rem;text-decoration:none;">&#129534; Attach a receipt</a>
+    <form id="receipt-form" method="post" action="/entry/{{ entry.id }}/attach_receipt{{ nav_qs }}" enctype="multipart/form-data"
+          style="display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+      <input type="file" name="receipt" required
+             onchange="if(this.files.length){this.form.submit();}"
+             accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx" style="font-size:.82rem;">
+      <button type="submit" class="btn btn-ghost btn-sm">Upload</button>
+    </form>
+  </div>
+
+  {# #5 — record linking & actions: turn a misclassified/harvested record into
+     a full bill, link it to its original document once one turns up, or flag
+     that staff searched and there genuinely isn't one on file. #}
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;">
+    <div style="font-weight:700;color:var(--navy);font-size:.9rem;margin-bottom:8px;">&#128279; Record Actions</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      {% if entry.doc_type != 'Bill' %}
+      <form method="post" action="/entry/{{ entry.id }}/turn_into_bill{{ nav_qs }}" style="margin:0;"
+            onsubmit="return confirm('Turn this record into a Bill? Its history and attachments stay put.');">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Reclassify this record as an unpaid bill">&#128179; Turn into bill</button>
+      </form>
+      {% endif %}
+      {% if entry.no_original_on_file %}
+      <form method="post" action="/entry/{{ entry.id }}/no_original{{ nav_qs }}" style="margin:0;">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Set by {{ entry.no_original_by or '?' }} on {{ entry.no_original_at or '?' }} — click to clear">
+          &#10003; No original on file &mdash; clear
+        </button>
+      </form>
+      {% else %}
+      <form method="post" action="/entry/{{ entry.id }}/no_original{{ nav_qs }}" style="margin:0;">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Confirm you searched and there's no source invoice/document for this record">
+          Mark: no original on file
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    {% if link_candidates %}
+    <div style="margin-top:10px;">
+      <div style="font-size:.82rem;color:var(--mid);margin-bottom:6px;">Possible original{{ 's' if link_candidates|length != 1 }} for this record:</div>
+      {% for c in link_candidates %}
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:.85rem;border-bottom:1px solid #f3f3f3;">
+        <a href="/entry/{{ c.id }}/view{{ nav_qs }}" style="font-weight:600;">#{{ c.id }}</a>
+        <span style="flex:1;color:var(--mid);">{{ c.vendor or '?' }}{% if c.amount %} &middot; ${{ "{:,.2f}".format(c.amount) }}{% endif %}{% if c.doc_type %} &middot; {{ c.doc_type }}{% endif %}{% if c.date_received %} &middot; {{ c.date_received }}{% endif %}</span>
+        <form method="post" action="/entry/{{ entry.id }}/link_original/{{ c.id }}{{ nav_qs }}" style="margin:0;">
+          <button type="submit" class="btn btn-ghost btn-sm" title="Attach #{{ c.id }}'s document here as this record's original">Link as original</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div style="margin-top:14px;font-size:.78rem;color:var(--mid);">
+    Logged {{ entry.created_at or '—' }}{% if entry.updated_at and entry.updated_at != entry.created_at %} · Updated {{ entry.updated_at }}{% endif %}
+  </div>
+</div></div>
+
+</div>
+
+{% if has_pdf %}
+<script>
+// Hover-to-highlight document viewer (deferred: initDocViewer is defined in
+// base.html's bottom script block, which runs after this inline one).
+document.addEventListener('DOMContentLoaded', function(){
+  initDocViewer({viewer:'doc-viewer',
+                 hlUrl:'/entry/{{ entry.id }}/highlights',
+                 pageUrl:'/entry/{{ entry.id }}/page/',
+                 fallback:'/entry/{{ entry.id }}/pdf'});
+});
+</script>
+{% endif %}
+
+{% if entry.email_body %}
+<div id="email-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;padding:24px;"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div class="card" style="width:760px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>&#9993;&#65039; Source Email</span>
+      <span onclick="document.getElementById('email-modal').style.display='none'" style="cursor:pointer;font-size:1.4rem;line-height:1;" title="Close">&times;</span>
+    </div>
+    <div class="card-body" style="overflow:auto;">
+      <div style="font-size:.85rem;color:var(--mid);margin-bottom:10px;line-height:1.6;">
+        <div><strong>From:</strong> {{ entry.email_from or '—' }}</div>
+        <div><strong>To:</strong> {{ entry.email_to or '—' }}{% if entry.email_account %} &nbsp;<span style="font-size:.8em;">(arrived in {{ entry.email_account }})</span>{% endif %}</div>
+        <div><strong>Subject:</strong> {{ entry.email_subject or '—' }}</div>
+        <div><strong>Date:</strong> {{ entry.email_date or '—' }}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <a class="btn btn-ghost btn-sm" href="{{ email_mailto(entry, 'reply') }}">&#8617; Reply</a>
+        <a class="btn btn-ghost btn-sm" href="{{ email_mailto(entry, 'forward') }}">&#8618; Forward</a>
+      </div>
+      <pre style="white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:.85rem;color:var(--dark);background:#f8f8fb;border:1px solid #eee;border-radius:6px;padding:12px;margin:0;">{{ entry.email_body }}</pre>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% include "_folder_picker.html" %}
+{% endblock %}

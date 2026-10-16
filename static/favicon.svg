@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Klick Klack: the navy stamp-block of the nav bar, with a cream "KK"
+       pressed into it like a rubber stamp. Two colours, heavy strokes, so the
+       mark holds down to 16px in a browser tab. -->
+  <rect x="1" y="1" width="30" height="30" rx="6" fill="#1F3864"/>
+  <!-- a faint inset line — the raised edge of a stamp face -->
+  <rect x="4.2" y="4.2" width="23.6" height="23.6" rx="3.4" fill="none"
+        stroke="#fdfbf3" stroke-opacity="0.16" stroke-width="1"/>
+  <!-- the KK, tipped a touch as a real stamp lands -->
+  <g stroke="#fdfbf3" stroke-width="3.1" stroke-linecap="round"
+     stroke-linejoin="round" fill="none" transform="rotate(-5 16 16)">
+    <g transform="translate(7.3 7)">
+      <line x1="0" y1="0" x2="0" y2="18"/>
+      <line x1="0" y1="9.4" x2="7.6" y2="0"/>
+      <line x1="0" y1="9.4" x2="7.6" y2="18"/>
+    </g>
+    <g transform="translate(17 7)">
+      <line x1="0" y1="0" x2="0" y2="18"/>
+      <line x1="0" y1="9.4" x2="7.6" y2="0"/>
+      <line x1="0" y1="9.4" x2="7.6" y2="18"/>
+    </g>
+  </g>
+</svg>

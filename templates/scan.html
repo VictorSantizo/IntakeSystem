@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>&#128424;&#65039; Scan</h1>
+<p class="subtitle">Scan paper straight into Klick Klack from this computer's ScanSnap</p>
+
+<div class="card" style="max-width:760px;">
+  <div class="card-header">This computer</div>
+  <div style="padding:16px 20px;">
+    <div id="checks" style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:.9rem;"></div>
+  </div>
+</div>
+
+<!-- STRANDED: files are in the scan folder but never made it into Klick Klack. -->
+<div id="state-stranded" class="card" style="max-width:760px;display:none;">
+  <div class="card-header" style="background:var(--orange);">Waiting files found</div>
+  <div style="padding:16px 20px;font-size:.92rem;">
+    <p style="margin:0 0 8px;"><strong id="stranded-count"></strong> in the scan folder
+      never made it into Klick Klack:</p>
+    <ul id="stranded-list" style="margin:0 0 12px 20px;line-height:1.7;font-size:.85rem;color:var(--mid);"></ul>
+    <button class="btn btn-primary" id="stranded-btn" onclick="bringThemIn()">Bring them in now</button>
+    <span id="stranded-msg" style="margin-left:10px;font-size:.85rem;color:var(--mid);"></span>
+  </div>
+</div>
+
+<!-- READY: load pages and press the scanner's button; we watch for the arrival. -->
+<div id="state-ready" class="card" style="max-width:760px;display:none;">
+  <div class="card-header" style="background:var(--green);">Ready to scan</div>
+  <div style="padding:20px;">
+    <ol style="margin:0 0 14px 20px;line-height:1.9;font-size:.95rem;">
+      <li>Load your pages into the ScanSnap.</li>
+      <li>On the scanner's screen, make sure the <strong>Klick Klack</strong> tile is selected.</li>
+      <li>Press the blue <strong>Scan</strong> button on the scanner.</li>
+    </ol>
+    <div class="alert alert-info" style="display:flex;align-items:center;gap:10px;margin:0;">
+      <span id="wait-spin" style="display:inline-block;width:14px;height:14px;border:2px solid var(--blue);border-top-color:transparent;border-radius:50%;animation:kkspin 1s linear infinite;"></span>
+      <span id="wait-msg">Watching for your scan&hellip; the moment it lands here, you'll jump straight to it.</span>
+    </div>
+    <div id="auto-filed-msg" style="display:none;margin-top:10px;padding:8px 12px;background:#eefaf0;border:1px solid #bfe6c8;border-radius:6px;font-size:.88rem;"></div>
+    <div style="font-size:.78rem;color:var(--mid);margin-top:10px;">
+      Scanned a stack of separate documents? They all land in the
+      <a href="/review">Needs Review</a> &mdash; you'll be taken to the first one.
+      A known, routine bill may <strong>file itself</strong> &mdash; when that happens
+      it shows up right here with a link to the record.
+    </div>
+  </div>
+</div>
+
+<!-- CONNECTED BUT NOT READY: targeted fixes for whichever check is failing. -->
+<div id="state-fix" class="card" style="max-width:760px;display:none;">
+  <div class="card-header" style="background:var(--orange);">Almost there</div>
+  <div style="padding:20px;font-size:.92rem;">
+    <div id="fix-scanner" style="display:none;">
+      <strong>The ScanSnap isn't showing up on this computer.</strong>
+      <ol style="margin:6px 0 14px 20px;line-height:1.8;">
+        <li>Check the scanner's USB cable is plugged into this computer.</li>
+        <li>Open the scanner's feed tray so it powers on (the screen lights up).</li>
+      </ol>
+    </div>
+    <div id="fix-software" style="display:none;">
+      <strong>ScanSnap Home isn't running.</strong>
+      <ol style="margin:6px 0 14px 20px;line-height:1.8;">
+        <li>Click Start, type <strong>ScanSnap Home</strong>, and open it.</li>
+        <li>Leave it running in the background &mdash; it does the scanning work.</li>
+      </ol>
+    </div>
+    <div id="fix-profile" style="display:none;">
+      <strong>This computer doesn't have the &ldquo;Klick Klack&rdquo; scan profile yet</strong> &mdash; one-time setup:
+      <div class="alert alert-info" style="margin:8px 0;">
+        <strong>Fast path:</strong> if <code>Klick Klack Profile</code> exists in <code>{{ scan_share }}</code>
+        (someone exported it from another machine), just run <strong>Connect My Scanner</strong> again
+        (<a href="/scan/connector-setup">download it here</a>) &mdash;
+        it opens that file and ScanSnap Home imports the profile in three clicks. Or in ScanSnap Home:
+        <em>Edit &rarr; Import/Export profiles &rarr; Import from a file</em>. No file yet? Build it once below,
+        then <em>Edit &rarr; Import/Export profiles &rarr; Export</em> it to <code>{{ scan_share }}</code> for every other machine.
+      </div>
+      <ol style="margin:6px 0 14px 20px;line-height:1.8;">
+        <li>Open <strong>ScanSnap Home</strong> &rarr; click the <strong>Scan</strong> button at the top left.</li>
+        <li>Click <strong>+ Add profile</strong> (or the &#9998; profile editor) and choose the <strong>&ldquo;Save documents&rdquo;</strong> template.</li>
+        <li>Name it exactly <strong>Klick Klack</strong>.</li>
+        <li>Under <strong>Save to</strong> / &ldquo;Type of file storage&rdquo;, pick <strong>a folder on this PC</strong> and set the folder to
+          <code>{{ scan_share }}\Unfiled Scans</code> (type the full path &mdash; drive letters differ between desks).</li>
+        <li>Save the profile. It appears as a tile on the scanner's touchscreen.</li>
+      </ol>
+      <div style="font-size:.8rem;color:var(--mid);">Full walkthrough with details: <code>{{ scan_share }}\SCANNER_SETUP.md</code></div>
+    </div>
+    <div style="font-size:.8rem;color:var(--mid);">This page re-checks automatically every few seconds &mdash; it flips green by itself once everything's in place.</div>
+  </div>
+</div>
+
+<!-- NO CONNECTOR: walk this machine through joining the scan flow. -->
+<div id="state-connect" class="card" style="max-width:760px;display:none;">
+  <div class="card-header">Connect this computer (one-time)</div>
+  <div style="padding:20px;font-size:.92rem;">
+    <p style="margin-bottom:12px;">Klick Klack can't see this computer's scanner yet. Two steps, once per computer:</p>
+    <ol style="margin:0 0 14px 20px;line-height:2;">
+      <li><a class="btn btn-success" href="/scan/connector-setup">&#11015;&#65039; Download &ldquo;Connect My Scanner&rdquo;</a><br>
+        Run the downloaded file (check your <strong>Downloads</strong> folder). If Windows asks whether to run it,
+        choose <strong>Run</strong> &mdash; it comes from Klick Klack's own server. A black window says
+        <em>Connected!</em> and this page flips by itself. (That starts the scan connector now and at every
+        sign-in. The same file also lives at <code>{{ scan_share }}</code> if you prefer the share.)</li>
+      <li>If this computer has never scanned into Klick Klack before, you'll also be shown how to add the
+        <strong>Klick Klack</strong> profile in ScanSnap Home &mdash; the steps appear right here once step&nbsp;1 is done.</li>
+    </ol>
+    <div class="alert alert-info" style="margin:0;">Waiting for the connector&hellip; this page checks every few seconds.
+      <span style="font-size:.8rem;color:var(--mid);">(Scanner not plugged into any computer? Bills scanned on another machine's ScanSnap land in the same <a href="/review">Needs Review</a>.)</span>
+    </div>
+  </div>
+</div>
+
+<style>@keyframes kkspin{to{transform:rotate(360deg)}}</style>
+<script>
+const BASELINE = {{ baseline }};
+let since = BASELINE;
+
+function check(label, ok, detail){
+  return '<span style="font-size:1rem;">' + (ok ? '&#9989;' : '&#10060;') + '</span>' +
+         '<span>' + label + (detail ? ' <span style="color:var(--mid);font-size:.8rem;">' + detail + '</span>' : '') + '</span>';
+}
+
+function render(st){
+  const c = st.connector;
+  const rows = [];
+  const fresh = !!(c && c.fresh);
+  rows.push(check('Scan connector running on this computer', fresh,
+                  fresh && c.machine ? 'on ' + c.machine : ''));
+  rows.push(check('ScanSnap plugged in &amp; awake', !!(fresh && c.scanner_present),
+                  fresh && c.scanner_model ? c.scanner_model : ''));
+  rows.push(check('ScanSnap Home software running', !!(fresh && c.scansnap_running), ''));
+  rows.push(check('&ldquo;Klick Klack&rdquo; scan profile installed', !!(fresh && c.profile_ok), ''));
+  document.getElementById('checks').innerHTML = rows.join('');
+
+  const stranded = st.stranded || [];
+  document.getElementById('state-stranded').style.display = stranded.length ? '' : 'none';
+  if (stranded.length){
+    document.getElementById('stranded-count').textContent =
+      stranded.length + ' scan' + (stranded.length > 1 ? 's' : '');
+    document.getElementById('stranded-list').innerHTML = stranded.map(f =>
+      '<li>' + esc(f.name) + ' <span style="font-size:.78rem;">(' +
+      (f.age_minutes >= 60 ? Math.floor(f.age_minutes/60) + 'h ago' : f.age_minutes + ' min ago') +
+      ')</span></li>').join('');
+  }
+
+  const ready = fresh && c.scanner_present && c.scansnap_running && c.profile_ok;
+  document.getElementById('state-ready').style.display  = ready ? '' : 'none';
+  document.getElementById('state-fix').style.display    = (fresh && !ready) ? '' : 'none';
+  document.getElementById('state-connect').style.display = fresh ? 'none' : '';
+  if (fresh && !ready){
+    document.getElementById('fix-scanner').style.display  = c.scanner_present ? 'none' : '';
+    document.getElementById('fix-software').style.display = (c.scanner_present && !c.scansnap_running) ? '' : 'none';
+    document.getElementById('fix-profile').style.display  = (c.scanner_present && c.scansnap_running && !c.profile_ok) ? '' : 'none';
+  }
+}
+
+function esc(s){
+  const d = document.createElement('span'); d.textContent = s; return d.innerHTML;
+}
+
+function bringThemIn(){
+  const btn = document.getElementById('stranded-btn');
+  btn.disabled = true;
+  document.getElementById('stranded-msg').textContent = 'Bringing them in… they land in Needs Review.';
+  fetch('/api/scan_now', {method:'POST', headers:{'X-CSRF-Token': window.__CSRF__}})
+    .then(r=>r.json())
+    .then(()=>{ setTimeout(()=>{ btn.disabled = false; pollStatus(); }, 5000); })
+    .catch(()=>{ btn.disabled = false;
+      document.getElementById('stranded-msg').textContent = 'That didn’t work — try again.'; });
+}
+
+function pollStatus(){
+  fetch('/api/scan/status').then(r=>r.json()).then(render).catch(()=>{});
+}
+
+function pollArrivals(){
+  fetch('/api/scan/arrivals?since=' + since + '&since_ts=' + (sinceTs===null ? 1e15 : sinceTs))
+   .then(r=>r.json()).then(d=>{
+    if (d && d.now) sinceTs = d.now;
+    // Auto-confirmed scans file themselves and never reach review — say so
+    // instead of silence (they used to look lost from this page).
+    const auto = (d && d.auto_filed) || [];
+    if (auto.length){
+      const a = auto[auto.length-1];
+      const el = document.getElementById('auto-filed-msg');
+      if (el){
+        el.style.display = '';
+        el.innerHTML = '&#9989; <strong>Filed automatically:</strong> ' + esc(a.name) +
+          '<div style="font-family:Consolas,monospace;font-size:.72rem;color:var(--mid);word-break:break-all;">' + esc(a.dir_unc || '') + '</div>' +
+          '<a href="/entry/' + a.id + '/view" style="font-size:.82rem;">Open the record' +
+          (a.record_no ? ' ' + esc(a.record_no) : '') + '</a>';
+      }
+    }
+    const items = (d && d.items) || [];
+    if (!items.length) return;
+    since = items[items.length-1].id;
+    document.getElementById('wait-msg').innerHTML =
+      '&#127881; <strong>' + items.length + ' scan' + (items.length>1?'s':'') +
+      ' arrived!</strong> Opening&hellip;';
+    setTimeout(()=>{ location.href = '/review/' + items[0].id + '?scanflow=1' + (items[0].batch ? '&batch=' + encodeURIComponent(items[0].batch) : ''); }, 700);
+  }).catch(()=>{});
+}
+var sinceTs = null;
+
+render({connector: {{ (connector or none) | tojson }}});
+pollStatus();
+setInterval(pollStatus, 5000);
+setInterval(pollArrivals, 2500);
+</script>
+{% endblock %}

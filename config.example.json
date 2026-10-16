@@ -1,0 +1,44 @@
+{
+  "_comment": "Copy to config.json and fill in. The real config.json is gitignored: it holds the Claude API key, the mailbox passwords, and staff password hashes. Keep this file ASCII-only (load_config reads it with the Windows default cp1252 encoding).",
+  "scan_folder": "T:\\IntakeSystem\\Unfiled Scans",
+  "email_folder": "T:\\IntakeSystem\\Email Scans",
+  "filed_folder": "F:\\File-Cabinet\\IntakeSystem\\Filed",
+  "_mail_accounts_comment": "Mailboxes email intake polls (edit in Settings). protocol imap|pop3. Polling is read-only: never marks read, moves, or deletes. lookback_days = how far back to look; keep small for a newly added mailbox whose history was already ingested elsewhere (dedup by Message-ID skips repeats either way). Old-style gmail_user/gmail_app_password keys are auto-migrated into this list at startup.",
+  "mail_accounts": [
+    { "id": 1, "name": "Gmail intake", "protocol": "imap", "host": "imap.gmail.com", "port": 993, "ssl": true,
+      "username": "intake-inbox@example.com", "password": "16charapppasswd", "enabled": true, "lookback_days": 30 },
+    { "id": 2, "name": "Office POP3", "protocol": "pop3", "host": "pop.example.com", "port": 995, "ssl": true,
+      "username": "office@example.com", "password": "mailbox-password", "enabled": true, "lookback_days": 3 }
+  ],
+  "claude_api_key": "YOUR_API_KEY_HERE",
+  "_auto_confirm_comment": "off | known-vendors | aggressive. Missing key = known-vendors. See Settings page.",
+  "auto_confirm": "known-vendors",
+  "entities": [
+    { "code": "TRUST1", "name": "Example Trust One" },
+    { "code": "PP", "name": "PP Properties LLC" }
+  ],
+  "properties": [
+    { "code": "T27", "address": "123 Example Ave, Sometown CA", "entity_code": "TRUST1" },
+    { "code": "PP16", "address": "456 Sample St, Sometown CA", "entity_code": "PP", "note": "optional free-text note" }
+  ],
+  "bill_types": [
+    { "code": "ELEC", "description": "Electricity", "category": "Bill" },
+    { "code": "RENT", "description": "Rent received", "category": "Income" },
+    { "code": "BANK", "description": "Bank statement", "category": "Statement" }
+  ],
+  "staff": [
+    { "name": "Alice", "password": "plaintext-gets-hashed-on-first-restart", "admin": true },
+    { "name": "Bob", "password": "plaintext-gets-hashed-on-first-restart" }
+  ],
+  "session_timeout_minutes": 30,
+  "_scanflow_comment": "Scan-straight-in (see SCANNER_DESIGN.md). archive_folder = the human filing tree the File-as panel suggests into; app_url + connector_token are read by scan_connector.py on each workstation (any long random string; must match what the server checks).",
+  "archive_folder": "F:\\File-Cabinet\\Files",
+  "app_url": "http://your-server:5050",
+  "connector_token": "GENERATE-A-LONG-RANDOM-STRING",
+  "_night_shift_comment": "Dev API for unattended night-shift sessions (VALIDATION_WORKFLOW.md + DESIGN.md sec 8): lets them add issue-report dev notes and set In progress / Dev-resolved through the running app -- never Verified, never intake.db directly. Any long random string, DISTINCT from connector_token; leave blank/absent to turn the API off.",
+  "night_shift_token": "GENERATE-A-DIFFERENT-LONG-RANDOM-STRING",
+  "_cabinet_comment": "Live cabinet watcher + folder browser (2026-07-29). ALL OPTIONAL with sensible defaults. pickup_roots: trees watched for hand-filed documents (default: archive_folder + filed_folder). pickup_exts: watched extensions (default ['.pdf']). cabinet_root / cabinet_exclude: the whole-file-server move-anywhere policy (defaults: F:\\File-Cabinet minus IntakeSystem and _OPS INDEX). server_root + server_root_unc: how staff-facing paths are rewritten to UNC. scan_copy_mirrors: MACHINE-NAME -> staff name; that desk's connector mirrors the staff member's Scan Archive down to its Desktop\\SCANS folder.",
+  "server_root": "F:\\File-Cabinet",
+  "server_root_unc": "\\\\LACKSSERVER2021\\File-Cabinet",
+  "scan_copy_mirrors": { "NANCY-PC-NAME-HERE": "Nancy" }
+}

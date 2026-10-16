@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1>Bills</h1>
+    <p class="subtitle">Every bill, paid and unpaid &mdash; filter, search, and work them</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a href="/bills"               class="btn {% if view in ('all','search') %}btn-primary{% else %}btn-ghost{% endif %}">All Bills</a>
+    <a href="/bills?view=due"      class="btn {% if view=='due' %}btn-primary{% else %}btn-ghost{% endif %}">By Due Date</a>
+    <a href="/bills?view=vendor"   class="btn {% if view=='vendor' %}btn-primary{% else %}btn-ghost{% endif %}">By Vendor</a>
+    <a href="/bills?view=entity"   class="btn {% if view=='entity' %}btn-primary{% else %}btn-ghost{% endif %}">By Entity</a>
+    <a href="/bills?view=property" class="btn {% if view=='property' %}btn-primary{% else %}btn-ghost{% endif %}">By Property</a>
+    <a href="/expected" class="btn btn-ghost" style="border-left:1px solid var(--light-blue);border-radius:0 6px 6px 0;"
+       title="Recurring bills we're watching for — flags ones that usually arrive by now">&#128225; Expected</a>
+  </div>
+</div>
+
+{# Report #93 (Joshua): searching used to submit this form on its own and throw
+   the filter bar's state away, so a search always came back unfiltered. The
+   filters ride along as hidden fields (and the filter bar carries q the same
+   way) — the two controls now compose in both directions. #}
+<form method="GET" action="/bills" role="search" style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <input type="search" name="q" value="{{ q or '' }}"
+         placeholder="Search all documents — vendor, invoice #, account #, property, address, amount, filename…"
+         style="flex:1;min-width:280px;" {% if view=='search' %}autofocus{% endif %}>
+  {% for k, v in filters.items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+  <button type="submit" class="btn btn-primary">&#128269; Search</button>
+  {% if q %}<a href="/bills" class="btn btn-ghost">Clear</a>{% endif %}
+</form>
+
+{% if view == 'search' and filters_on %}
+<div class="alert alert-info" style="margin-bottom:14px;font-size:.87rem;" data-kk="search-filters-on">
+  These search results are still narrowed by your filters:
+  {% for k, v in filters_on.items() %}<strong>{{ v }}</strong>{{ ' · ' if not loop.last }}{% endfor %}
+  &nbsp;<a href="/bills?q={{ q|urlencode }}" style="color:var(--blue);">search everything instead</a>
+</div>
+{% endif %}
+
+{% macro source_cell(b) %}
+  {% if (b.mail_type or 'Physical Mail') == 'Email' %}
+  <td data-sort="Email" style="white-space:nowrap;font-size:.82rem;" title="Arrived by email{% if b.email_from %} &mdash; {{ b.email_from }}{% endif %}">&#128231; Email</td>
+  {% else %}
+  <td data-sort="Mail" style="white-space:nowrap;font-size:.82rem;" title="Arrived by {{ (b.mail_type or 'physical mail')|lower }}">&#9993;&#65039; {{ 'Mail' if (b.mail_type or 'Physical Mail') == 'Physical Mail' else b.mail_type }}</td>
+  {% endif %}
+{% endmacro %}
+
+{% macro card_grid(items, empty_msg) %}
+{% if items %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;">
+  {% for it in items %}
+  <a href="{{ it.link }}" style="text-decoration:none;">
+    <div class="card" style="height:100%;transition:transform .1s,box-shadow .15s;cursor:pointer;"
+         onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.15)'"
+         onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div class="card-body" style="padding:16px 18px;">
+        <div style="font-weight:700;color:var(--navy);font-size:1rem;margin-bottom:2px;">{{ it.label }}</div>
+        {% if it.sublabel %}<div style="font-size:.78rem;color:var(--mid);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ it.sublabel }}</div>{% endif %}
+        <div style="font-size:1.6rem;font-weight:bold;color:var(--red);line-height:1.1;">${{ "{:,.2f}".format(it.total) }}</div>
+        <div style="font-size:.8rem;color:var(--mid);margin-top:6px;">
+          {{ it.count }} bill{{ 's' if it.count != 1 else '' }}
+          {% if it.next_due %}&nbsp;&middot;&nbsp; next due <span style="{% if it.next_due < today %}color:var(--red);font-weight:bold;{% endif %}">{{ it.next_due }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card"><div class="card-body" style="text-align:center;padding:50px;color:#2E7D32;">&#10003; {{ empty_msg }}</div></div>
+{% endif %}
+{% endmacro %}
+
+{% if view == 'search' %}
+<div class="alert alert-info" style="margin-bottom:16px;">
+  {% if search_results %}
+  <strong>{{ search_results|length }}</strong> record{{ 's' if search_results|length!=1 else '' }} matching &ldquo;{{ q }}&rdquo;{% if search_results|length >= 200 %} (showing the first 200 — narrow the search){% endif %}
+  <span style="font-size:.82rem;color:var(--mid);"> &nbsp;— searches every logged document, not just unpaid bills.</span>
+  {% else %}
+  No records match &ldquo;{{ q }}&rdquo;{% if queue_matches %}, but {{ queue_matches|length }} document{{ 's are' if queue_matches|length != 1 else ' is' }} still waiting in Needs Review below{% endif %}. Try a shorter or different keyword — an account number, a property code, or part of a vendor name. <span style="font-size:.82rem;color:var(--mid);">(This searches the logged records, not the text inside the PDF files.)</span>
+  {% endif %}
+</div>
+
+{# Report #16 (Nancy) — "could we have the top universal search also search the
+   review queue". These are NOT records yet, so they get their own section
+   rather than being mixed into the results above: nothing about them is
+   filed, and clicking one takes you to the review form, not a record. Report
+   #95 is the case that made it urgent: three of Nancy's eight ACS invoices
+   were held here, and a held document is unfindable from the Log by
+   definition — it has no record to find. The FILENAME is searched too,
+   because a held row carries the AI's reading of the vendor, not the name on
+   the file. #}
+{% if queue_matches %}
+<div class="card" style="margin-top:16px;border-left:4px solid var(--orange);">
+  <div class="card-header" style="background:var(--orange);">&#128269; Still waiting in Needs Review ({{ queue_matches|length }})</div>
+  <div class="card-body" style="padding:0;">
+  <table>
+    <thead><tr><th>In queue</th><th>Received</th><th>Source</th><th>Vendor / Title</th><th>Prop.</th><th>Amount</th><th>File</th><th></th></tr></thead>
+    <tbody>
+    {% for sid, d in queue_matches %}
+    <tr style="cursor:pointer;" onclick="window.location.href='/review/{{ sid }}'" title="Open this document in Needs Review">
+      <td style="white-space:nowrap;"><a class="recno" href="/review/{{ sid }}" onclick="event.stopPropagation()">queue #{{ sid }}</a></td>
+      <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ d.received_date or '—' }}</td>
+      <td style="font-size:.82rem;">{{ d.mail_type or '—' }}</td>
+      <td style="font-weight:600;">{{ d.vendor or '—' }}{% if d.doc_type %}<br><span style="font-size:.72rem;font-weight:400;color:var(--mid);">{{ d.doc_type }}</span>{% endif %}</td>
+      <td style="font-size:.82rem;"><code>{{ (d.property_codes or [])|join(', ') or '—' }}</code></td>
+      <td class="amount">{% if d.amount %}${{ "{:,.2f}".format(d.amount|float) }}{% else %}—{% endif %}</td>
+      <td style="font-size:.72rem;color:var(--mid);word-break:break-all;">{{ (d.pdf_path or '').split('\\')|last }}</td>
+      <td onclick="event.stopPropagation()"><a href="/review/{{ sid }}" class="btn btn-ghost btn-sm">Review</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="card-body" style="font-size:.8rem;color:var(--mid);padding-top:0;">
+    These have not been logged yet — nothing about them is filed until someone confirms them.
+    <a href="/review?q={{ q|urlencode }}">Search the whole review queue &rarr;</a>
+  </div>
+</div>
+{% endif %}
+{% if search_results %}
+<div class="card"><div class="card-body" style="padding:0;">
+<table class="sortable">
+  {# Nancy's #15: she wanted the SOURCE (did this arrive by email or on paper?)
+     where the Type column was. The type still travels with the title so a
+     search across every doc type doesn't lose what each result is. #}
+  <thead><tr><th>Record #</th><th>Received</th><th>Source</th><th>Vendor / Title</th><th>Entity</th><th>Prop.</th><th>Invoice #</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+  {% for e in search_results %}
+  <tr style="cursor:pointer;" onclick="window.location.href='/entry/{{ e.id }}/view{{ nav_qs }}'" title="Click to view this record">
+    <td><a class="recno" href="/entry/{{ e.id }}/view{{ nav_qs }}" onclick="event.stopPropagation()">{{ e.record_no or '#' ~ e.id }}</a></td>
+    <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ e.date_received or '—' }}</td>
+    {{ source_cell(e) }}
+    <td style="font-weight:600;">{{ e.vendor or '—' }}{% if e.doc_type %}<br><span style="font-size:.72rem;font-weight:400;color:var(--mid);">{{ e.doc_type }}</span>{% endif %}</td>
+    <td><code>{{ e.entity_code or '—' }}</code>{% if e.entity_code and entity_names.get(e.entity_code) %}<br><span style="font-size:.72rem;color:var(--mid);">{{ entity_names[e.entity_code] }}</span>{% endif %}</td>
+    <td style="font-size:.82rem;"><code>{{ e.property_code or '—' }}</code></td>
+    <td style="font-size:.82rem;">{{ e.invoice_number or '—' }}</td>
+    <td class="amount">${{ "{:,.2f}".format(e.amount) if e.amount else '—' }}</td>
+    <td style="white-space:nowrap;font-size:.85rem;{% if e.due_date and e.due_date < today %}color:var(--red);font-weight:bold;{% endif %}">{{ e.due_date or '—' }}</td>
+    <td><span class="badge-status {{ sc.get(e.status,'s-pending') }}">{{ e.status }}</span></td>
+    <td onclick="event.stopPropagation()"><a href="/entry/{{ e.id }}/edit{{ nav_qs }}" class="btn btn-ghost btn-sm">Edit</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% endif %}
+
+{% if doc_matches %}
+<div class="card" style="margin-top:16px;"><div class="card-header">&#128196; Matches inside documents ({{ doc_matches|length }})</div>
+<div class="card-body" style="padding:0;">
+<table class="sortable">
+  <thead><tr><th>Record #</th><th>Received</th><th>Source</th><th>Vendor / Title</th><th>Prop.</th><th>Found in the document text</th><th></th></tr></thead>
+  <tbody>
+  {% for e in doc_matches %}
+  <tr style="cursor:pointer;" onclick="window.location.href='/entry/{{ e.id }}/view{{ nav_qs }}'" title="Click to view this record">
+    <td><a class="recno" href="/entry/{{ e.id }}/view{{ nav_qs }}" onclick="event.stopPropagation()">{{ e.record_no or '#' ~ e.id }}</a></td>
+    <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ e.date_received or '—' }}</td>
+    {{ source_cell(e) }}
+    <td style="font-weight:600;">{{ e.vendor or '—' }}{% if e.doc_type %}<br><span style="font-size:.72rem;font-weight:400;color:var(--mid);">{{ e.doc_type }}</span>{% endif %}</td>
+    <td style="font-size:.82rem;"><code>{{ e.property_code or '—' }}</code></td>
+    <td style="font-size:.82rem;color:var(--mid);font-style:italic;">&hellip;{{ e._snippet }}&hellip;</td>
+    <td onclick="event.stopPropagation()"><a href="/entry/{{ e.id }}/view{{ nav_qs }}" class="btn btn-ghost btn-sm">View</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% endif %}
+
+{% if index_status %}
+<p class="subtitle" style="margin-top:12px;">
+  Also searched inside <strong>{{ index_status.total }}</strong> document{{ 's' if index_status.total!=1 else '' }}&rsquo; text{% if index_status.pending_ocr %} &nbsp;&middot;&nbsp; <span style="color:var(--orange);">{{ index_status.pending_ocr }} still need OCR</span>{% endif %}.
+  {% if is_admin %}
+  <form method="POST" action="/bills/reindex" style="display:inline;margin-left:8px;">
+    <input type="hidden" name="force" value="1">
+    <button type="submit" class="btn btn-ghost btn-sm" {% if reindex_running %}disabled{% endif %}>{% if reindex_running %}Reindexing&hellip;{% else %}&#8635; Reindex documents{% endif %}</button>
+  </form>
+  {% endif %}
+</p>
+{% endif %}
+
+{% elif view == 'all' %}
+<form method="GET" action="/bills" class="filter-bar">
+  <div class="form-group"><label>Status</label><select name="status"><option value="">All</option>{% for st in ['Pending','In Progress','Processed','Paid','Filed','On Hold'] %}<option value="{{ st }}" {{ 'selected' if filters.status==st else '' }}>{{ st }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Entity</label><select name="entity_code"><option value="">All Entities</option>{% for e in cfg.entities %}<option value="{{ e.code }}" {{ 'selected' if filters.entity_code==e.code else '' }}>{{ e.code }} &ndash; {{ e.name }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Property</label><select name="property_code"><option value="">All Properties</option>{% for p in cfg.properties %}<option value="{{ p.code }}" {{ 'selected' if filters.property_code==p.code else '' }}>{{ p.code }}</option>{% endfor %}</select></div>
+  {# #77 (Joshua): "we also need to filter by 'source'" — how the bill arrived.
+     Same vocabulary as the Mail Type field on a record, plus Upload (added
+     when the Upload-documents button shipped). #}
+  <div class="form-group"><label>Source</label><select name="mail_type"><option value="">Any source</option>{% for mt in ['Physical Mail','Email','Upload','Fax','Courier'] %}<option value="{{ mt }}" {{ 'selected' if filters.mail_type==mt else '' }}>{{ mt }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Received from</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+  <div class="form-group"><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+  <div style="display:flex;gap:8px;align-items:flex-end;"><button type="submit" class="btn btn-primary">Filter</button><a href="/bills" class="btn btn-ghost">Clear</a></div>
+</form>
+<div class="alert alert-info" style="margin-bottom:16px;">
+  <strong>{{ bill_summary.count }}</strong> bill{{ 's' if bill_summary.count!=1 else '' }}
+  &nbsp;&middot;&nbsp; <strong style="color:var(--red);">${{ "{:,.2f}".format(bill_summary.outstanding) }}</strong> outstanding
+  &nbsp;&middot;&nbsp; ${{ "{:,.2f}".format(bill_summary.paid) }} paid
+  <span style="font-size:.82rem;color:var(--mid);"> &nbsp;&mdash; click a column to sort; overdue unpaid bills are shaded.</span>
+</div>
+<div class="card"><div class="card-body" style="padding:0;">
+<table class="sortable">
+  <thead><tr><th>Record #</th><th>Received</th><th>Source</th><th>Vendor</th><th>Entity</th><th>Prop.</th><th>Invoice #</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+  {% for e in bill_rows %}
+  {% set is_overdue = e.status not in ('Paid','Filed') and e.due_date and e.due_date < today %}
+  <tr style="cursor:pointer;{% if is_overdue %}background:#FDE8E8;{% endif %}" onclick="window.location.href='/entry/{{ e.id }}/view{{ nav_qs }}'" title="Click to view this record">
+    <td><a class="recno" href="/entry/{{ e.id }}/view{{ nav_qs }}" onclick="event.stopPropagation()">{{ e.record_no or '#' ~ e.id }}</a></td>
+    <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ e.date_received or '—' }}</td>
+    {{ source_cell(e) }}
+    <td onclick="event.stopPropagation()"><a href="/bills/vendor/{{ e.vendor | urlencode }}" style="color:var(--blue);font-weight:600;">{{ e.vendor or '—' }}</a></td>
+    <td><code>{{ e.entity_code or '—' }}</code>{% if e.entity_code and entity_names.get(e.entity_code) %}<br><span style="font-size:.72rem;color:var(--mid);">{{ entity_names[e.entity_code] }}</span>{% endif %}</td>
+    <td style="font-size:.82rem;"><code>{{ e.property_code or '—' }}</code></td>
+    <td style="font-size:.82rem;">{{ e.invoice_number or '—' }}</td>
+    <td class="amount">${{ "{:,.2f}".format(e.amount) if e.amount else '—' }}</td>
+    <td style="white-space:nowrap;font-size:.85rem;{% if is_overdue %}color:var(--red);font-weight:bold;{% endif %}">{{ e.due_date or '—' }}{% if is_overdue %}&nbsp;&#9888;{% endif %}</td>
+    <td><span class="badge-status {{ sc.get(e.status,'s-pending') }}">{{ e.status }}</span></td>
+    <td onclick="event.stopPropagation()"><a href="/entry/{{ e.id }}/edit{{ nav_qs }}" class="btn btn-ghost btn-sm">Edit</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="11" style="text-align:center;padding:40px;color:#999;">No bills match your filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+
+{% elif view == 'entity' %}
+{% set total = entity_items | sum(attribute='total') %}
+<div class="alert alert-info" style="margin-bottom:16px;">
+  <strong>{{ entity_items|length }}</strong> entit{{ 'y' if entity_items|length==1 else 'ies' }} with unpaid bills &nbsp;&middot;&nbsp;
+  Total outstanding: <strong>${{ "{:,.2f}".format(total) }}</strong>
+</div>
+{{ card_grid(entity_items, "Nothing outstanding by entity.") }}
+
+{% elif view == 'property' %}
+{% set total = property_items | sum(attribute='total') %}
+<div class="alert alert-info" style="margin-bottom:16px;">
+  <strong>{{ property_items|length }}</strong> propert{{ 'y' if property_items|length==1 else 'ies' }} with unpaid bills &nbsp;&middot;&nbsp;
+  Total outstanding: <strong>${{ "{:,.2f}".format(total) }}</strong>
+  <span style="font-size:.82rem;color:var(--mid);"> &nbsp;(bills tagged to multiple properties count under each)</span>
+</div>
+{{ card_grid(property_items, "Nothing outstanding by property.") }}
+
+{% elif view == 'vendor' %}
+{% set total_owed = vendors | sum(attribute='total_amount') %}
+<div class="alert alert-info" style="margin-bottom:16px;">
+  <strong>{{ vendors|length }} vendor{{ 's' if vendors|length!=1 else '' }}</strong> with unpaid bills &nbsp;&middot;&nbsp;
+  Total outstanding: <strong>${{ "{:,.2f}".format(total_owed) }}</strong>
+</div>
+<div class="card"><div class="card-body" style="padding:0;">
+<table class="sortable">
+  <thead><tr><th>Vendor</th><th>Entities</th><th># Bills</th><th>Total Owed</th><th>Next Due</th><th></th></tr></thead>
+  <tbody>
+  {% for v in vendors %}
+  <tr style="cursor:pointer;" onclick="location.href='/bills/vendor/{{ v.vendor | urlencode }}'">
+    <td style="font-weight:600;">{{ v.vendor }}</td>
+    <td style="font-size:.82rem;color:var(--mid);">{{ v.entities or '—' }}</td>
+    <td>{{ v.bill_count }}</td>
+    <td class="amount">${{ "{:,.2f}".format(v.total_amount) }}</td>
+    <td style="white-space:nowrap;{% if v.next_due and v.next_due < today %}color:var(--red);font-weight:bold;{% endif %}">
+      {{ v.next_due or '—' }}
+      {% if v.next_due and v.next_due < today %} ⚠{% endif %}
+    </td>
+    <td><a href="/bills/vendor/{{ v.vendor | urlencode }}" class="btn btn-orange btn-sm">View Bills &rarr;</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" style="text-align:center;padding:40px;color:#999;">No unpaid bills.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+
+{% else %}
+{% set overdue = by_due | selectattr('due_date') | selectattr('due_date', 'lt', today) | list %}
+{% if overdue %}
+<div class="alert alert-warning" style="margin-bottom:12px;">
+  &#9888;&#65039; <strong>{{ overdue|length }} overdue bill{{ 's' if overdue|length!=1 else '' }}</strong> past their due date.
+</div>
+{% endif %}
+<div class="card"><div class="card-body" style="padding:0;">
+<table class="sortable">
+  <thead><tr><th>Record #</th><th>Due Date</th><th>Vendor</th><th>Entity</th><th>Property</th><th>Bill Type</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+  {% for e in by_due %}
+  <tr style="cursor:pointer;" onclick="window.location.href='/entry/{{ e.id }}/view{{ nav_qs }}'" title="Click to view this record">
+    <td><a class="recno" href="/entry/{{ e.id }}/view{{ nav_qs }}" onclick="event.stopPropagation()">{{ e.record_no or '#' ~ e.id }}</a></td>
+    <td style="white-space:nowrap;font-weight:600;{% if e.due_date and e.due_date < today %}color:var(--red);{% endif %}">
+      {{ e.due_date or '— no date —' }}
+      {% if e.due_date and e.due_date < today %}&#9888;{% endif %}
+    </td>
+    <td onclick="event.stopPropagation()"><a href="/bills/vendor/{{ e.vendor | urlencode }}" style="color:var(--blue);">{{ e.vendor or '—' }}</a></td>
+    <td><code>{{ e.entity_code or '—' }}</code>{% if e.entity_code and entity_names.get(e.entity_code) %}<br><span style="font-size:.72rem;color:var(--mid);">{{ entity_names[e.entity_code] }}</span>{% endif %}</td>
+    <td style="font-size:.82rem;"><code>{{ e.property_code or '—' }}</code></td>
+    <td style="font-size:.82rem;">{{ e.bill_type_code or '—' }}</td>
+    <td class="amount">${{ "{:,.2f}".format(e.amount) if e.amount else '—' }}</td>
+    <td><span class="badge-status {{ sc.get(e.status,'s-pending') }}">{{ e.status }}</span></td>
+    <td onclick="event.stopPropagation()"><a href="/entry/{{ e.id }}/edit{{ nav_qs }}" class="btn btn-ghost btn-sm">Edit</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9" style="text-align:center;padding:40px;color:#999;">No unpaid bills.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% endif %}
+{% endblock %}

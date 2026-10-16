@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>My Account</h1>
+<p class="subtitle">Signed in as <strong>{{ session.user }}</strong></p>
+<div class="card" style="max-width:520px;"><div class="card-header">&#128274; Change Your Password</div><div class="card-body">
+  {% if pw_success %}<div class="alert alert-info" style="margin-bottom:14px;">&#10003; Password updated successfully.</div>{% endif %}
+  {% if pw_error %}<div class="alert alert-warning" style="margin-bottom:14px;">{{ pw_error }}</div>{% endif %}
+  <form method="POST" action="/account/change_password"><div class="form-grid">
+    <div class="form-group full"><label>Current Password</label><input type="password" name="current_password" required autocomplete="current-password"></div>
+    <div class="form-group"><label>New Password</label><input type="password" name="new_password" required autocomplete="new-password"></div>
+    <div class="form-group"><label>Confirm New Password</label><input type="password" name="confirm_password" required autocomplete="new-password"></div>
+    <div class="form-group full"><button type="submit" class="btn btn-primary">Update Password</button></div>
+  </div></form>
+</div></div>
+
+<div class="card" style="max-width:520px;margin-top:20px;"><div class="card-header">&#10024; Classy &amp; Colorful</div><div class="card-body">
+  <p class="subtitle" style="margin-bottom:10px;">Two looks, one app. <b>Classy</b> is the calmer redesign; <b>Colorful</b> is
+    the classic view (the one the themes below paint). Flick between them with the Classy switch in the top-right corner of
+    any page — your pick follows you to any computer, and everyone else keeps their own. Pages not yet rebuilt in Classy
+    simply show the Colorful view; more join it over time.</p>
+  <div style="display:flex;gap:10px;">
+    <form method="POST" action="/account/skin" style="margin:0;">
+      <input type="hidden" name="skin" value="new">
+      <button type="submit" class="btn btn-primary btn-sm">&#10024; Classy</button>
+    </form>
+    <form method="POST" action="/account/skin" style="margin:0;">
+      <input type="hidden" name="skin" value="classic">
+      <button type="submit" class="btn btn-ghost btn-sm">&#127752; Colorful</button>
+    </form>
+  </div>
+</div></div>
+
+<div class="card" style="max-width:520px;margin-top:20px;"><div class="card-header">&#127912; Interface Theme</div><div class="card-body">
+  <p class="subtitle" style="margin-bottom:10px;">Your pick, saved on this browser only — everyone else keeps their own.
+    (Themes color the Colorful look; Classy keeps its own single palette.)</p>
+  <select class="theme-pick" id="theme-picker" onchange="setTheme(this.value)" title="Pick an interface theme"
+          style="background:#fff;color:var(--dark);border:1px solid #ccc;">
+    <option value="default">&#127912; Classic</option>
+    <option value="hippie">&#9774; Hippie</option>
+    <option value="rockstar">&#127908; Rock Star</option>
+    <option value="coastal">&#127958; Coastal</option>
+  </select>
+</div></div>
+{% endblock %}

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Print email — Klick Klack</title>
+{# The standalone printable-page pattern (coversheet.html): no app chrome, own
+   styles, a screen-only toolbar, @page letter. Layout is Nancy's spec
+   (2026-08-10): header → "Attachments:" list (ALWAYS printed — the honest full
+   list with UNC paths for filed documents, or the literal "Attachments: None",
+   so there is never uncertainty) → message → footer. #}
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #e8eaed; color: #1a1a2e;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .toolbar { text-align: center; margin: 14px; }
+  .btn { font-size: 15px; cursor: pointer; background: #1565C0; color: #fff;
+         border: none; border-radius: 8px; padding: 10px 24px; }
+  .page { width: 7.5in; min-height: 9.7in; background: #fff; margin: 0 auto 18px;
+          padding: 0.55in 0.6in; box-shadow: 0 2px 10px rgba(0,0,0,.18);
+          display: flex; flex-direction: column; }
+  .brand { display: flex; justify-content: space-between; align-items: baseline;
+           border-bottom: 3px solid #1a1a2e; padding-bottom: 8px; margin-bottom: 14px; }
+  .brand .t { font-weight: 800; font-size: 1.05rem; letter-spacing: .3px; }
+  .brand .box { font-size: .8rem; color: #fff; background: #1565C0;
+                border-radius: 10px; padding: 2px 12px; }
+  table.head { border-collapse: collapse; font-size: .92rem; margin-bottom: 14px; }
+  table.head td { padding: 2px 12px 2px 0; vertical-align: top; }
+  table.head td.k { color: #666; white-space: nowrap; width: 72px; }
+  .atts { border: 1px solid #ccc; border-left: 4px solid #1565C0; background: #f6f8fb;
+          padding: 10px 14px; margin-bottom: 14px; font-size: .88rem; }
+  .atts .hd { font-weight: 700; margin-bottom: 4px; }
+  .atts ol { margin: 0 0 0 20px; padding: 0; }
+  .atts li { margin: 3px 0; }
+  .atts .note { display: block; font-size: .78rem; color: #444; overflow-wrap: anywhere; }
+  .atts .none { font-weight: 700; }
+  .body { border-top: 1px solid #ddd; padding-top: 12px; font-size: .9rem;
+          white-space: pre-wrap; overflow-wrap: anywhere; flex: 1; }
+  .foot { border-top: 2px solid #1a1a2e; margin-top: 16px; padding-top: 6px;
+          font-size: .74rem; color: #555; display: flex; justify-content: space-between; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .page { margin: 0 auto; box-shadow: none; width: auto; min-height: 0; padding: 0; }
+    @page { size: letter; margin: 0.5in; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">&#128424; Print this email</button>
+  </div>
+
+  <div class="page">
+    <div class="brand">
+      <span class="t">&#128231; Email &mdash; office mail archive</span>
+      <span class="box">{{ m.account_name or 'unknown mailbox' }}</span>
+    </div>
+
+    <table class="head">
+      <tr><td class="k">From</td><td>{{ m.from_addr or '&mdash;'|safe }}</td></tr>
+      <tr><td class="k">To</td><td>{{ m.to_addr or '&mdash;'|safe }}</td></tr>
+      {% if m.cc_addr %}<tr><td class="k">Cc</td><td>{{ m.cc_addr }}</td></tr>{% endif %}
+      <tr><td class="k">Date</td><td>{{ m.date_raw or m.date_iso or '&mdash;'|safe }}</td></tr>
+      <tr><td class="k">Subject</td><td><strong>{{ m.subject or '(no subject)' }}</strong></td></tr>
+    </table>
+
+    <div class="atts">
+      {% if atts %}
+      <div class="hd">Attachments:</div>
+      <ol>
+        {% for a in atts %}
+        <li>
+          {% if a.match and a.match.kind == 'record' %}<a href="/entry/{{ a.match.entry_id }}/view">{{ a.filename }}</a>
+          {%- elif a.blob %}<a href="/mail/attachment/{{ a.sha }}" target="_blank">{{ a.filename }}</a>
+          {%- else %}{{ a.filename }}{% endif %}
+          {% if a.size %}&nbsp;({{ a.size }}){% endif %}
+          <span class="note">{{ a.note }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <span class="none">Attachments: None</span>
+      {% endif %}
+    </div>
+
+    <div class="body">{{ m.body or '(no text body stored)' }}</div>
+
+    <div class="foot">
+      <span>Pulled from {{ m.account_name or '?' }} &mdash; the mailbox itself was never marked read</span>
+      <span>Printed {{ printed_at }}{% if printed_by %} by {{ printed_by }}{% endif %} &middot; Klick Klack</span>
+    </div>
+  </div>
+</body>
+</html>

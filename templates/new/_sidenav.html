@@ -1,0 +1,128 @@
+{# The new look's menu drawer + search overlay (2026-08-06, Karen's request:
+   "put the menus behind a hamburger — the 3 stacked lines thing — plus the
+   collapse-sidebar button and the search").
+
+   Three pieces, styled in static/newlook_nav.css:
+   - #side-nav: THE nav — the page links moved here from the topbar. Opened by
+     the topbar burger; the panel button ("pin") keeps it open as a real
+     sidebar, remembered per browser in localStorage 'kk-nav' (same manners as
+     the classic theme picker; applied pre-paint from new/base.html's head).
+   - #side-backdrop: dims the page while the drawer floats unpinned.
+   - #search-overlay: ONE search box for everything — words go to the Intake
+     Log's universal search, a record number (260714-003 or a plain id) jumps
+     via /goto. It owns id="goto-box", so the shared "/" shortcut and the
+     Helper's docs stay true; the no-JS fallback is a plain /log?search= GET.
+
+   Nav order is load-bearing (report #76 + tests): Review, then Find, then
+   Bills. Settings/Ops Reports stay in the topbar account menu (report #79). #}
+<aside id="side-nav" aria-label="Menu">
+  <div class="side-head">
+    <button type="button" id="nav-pin" class="iconbtn" data-kk="nav-pin"
+            title="Keep the menu open at the side / tuck it away again">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9.5 4v16"/></svg>
+    </button>
+    <a class="wordmark" href="/">Klick Klack</a>
+  </div>
+  <nav>
+    <a href="/" data-kk="nav-dashboard" class="{{ 'here' if request.endpoint=='dashboard' else '' }}">Today</a>
+    <a href="/scan" data-kk="nav-scan" class="{{ 'here' if request.endpoint=='scanflow.scan_page' else '' }}">Scan</a>
+    <a href="/review" data-kk="nav-review" class="{{ 'here' if request.endpoint in ['review_queue','review_item'] else '' }}">Review
+      <span class="badge js-pending-badge" {% if not (pending_count is defined and pending_count > 0) %}style="display:none;"{% endif %}>{{ pending_count if pending_count is defined and pending_count > 0 else '' }}</span></a>
+    {# Find sits beside Review (report #76): a document is either still in
+       Review or logged, and those are the only two places to look. #}
+    <a href="/log" data-kk="nav-log" class="{{ 'here' if request.endpoint=='log' else '' }}">Find</a>
+    <a href="/files" data-kk="nav-files" class="{{ 'here' if request.endpoint=='files_view' else '' }}">Files</a>
+    <a href="/mail" data-kk="nav-mail" class="{{ 'here' if request.endpoint in ['mail_page','mail_view'] else '' }}">Mail</a>
+    <a href="/bills" data-kk="nav-bills" class="{{ 'here' if request.endpoint in ['bills','vendor_bills','expected_bills_page'] else '' }}">Bills</a>
+    <a href="/catchup" data-kk="nav-catchup" class="{{ 'here' if request.endpoint=='catchup' else '' }}">Pay</a>
+    {% if session.get('user') == 'Karen' %}<a href="/karen" data-kk="nav-karen" class="{{ 'here' if request.endpoint=='karen_page' else '' }}">Questions</a>{% endif %}
+  </nav>
+</aside>
+<div id="side-backdrop"></div>
+
+<div id="search-overlay">
+  <div class="search-card">
+    <form id="search-form" action="/log" method="get">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+      <input id="goto-box" name="search" type="text" autocomplete="off"
+             placeholder="Search anything &mdash; or type a record # to jump to it">
+    </form>
+    <div class="search-hint">Finds vendors, properties, amounts, invoice &amp; account numbers, filenames&hellip;
+      &middot; a record number (like 260714-003, or a plain id) opens that record directly &middot; Esc closes</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement,
+      burger=document.getElementById('nav-burger'),
+      pin=document.getElementById('nav-pin'),
+      pane=document.getElementById('side-nav'),
+      back=document.getElementById('side-backdrop'),
+      sbtn=document.getElementById('search-btn'),
+      overlay=document.getElementById('search-overlay'),
+      form=document.getElementById('search-form'),
+      box=document.getElementById('goto-box');
+  function pinned(){return root.classList.contains('nav-pinned');}
+  function floating(){return root.classList.contains('nav-open');}
+  function narrow(){return window.matchMedia('(max-width:680px)').matches;}
+  function syncBurger(){if(burger)burger.setAttribute('aria-expanded',(pinned()&&!narrow())||floating()?'true':'false');}
+  function openNav(){root.classList.add('nav-open');syncBurger();}
+  function closeNav(){root.classList.remove('nav-open');syncBurger();}
+  function setPinned(on){
+    root.classList.toggle('nav-pinned',on);
+    root.classList.remove('nav-open');
+    try{localStorage.setItem('kk-nav',on?'pinned':'');}catch(e){}
+    syncBurger();
+  }
+  burger.addEventListener('click',function(){
+    // On a phone-width window a "pinned" drawer still floats, so the burger
+    // just opens/closes it there instead of unpinning.
+    if(pinned()&&!narrow()){setPinned(false);return;}
+    if(floating())closeNav();else openNav();
+  });
+  pin.addEventListener('click',function(){setPinned(!pinned());});
+  back.addEventListener('click',closeNav);
+
+  function openSearch(){overlay.classList.add('on');box.focus();box.select();}
+  function closeSearch(){overlay.classList.remove('on');}
+  sbtn.addEventListener('click',openSearch);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)closeSearch();});
+  form.addEventListener('submit',function(e){
+    // A record number jumps straight to the record; anything else is a word
+    // search (the form's own GET /log?search= — also the no-JS fallback).
+    var v=(box.value||'').trim().replace(/^#/,'');
+    if(/^\d{1,7}$/.test(v)||/^\d{6}-\d{1,4}$/.test(v)){
+      e.preventDefault();
+      window.location.href='/goto?q='+encodeURIComponent(v);
+    }
+  });
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){
+      if(overlay.classList.contains('on'))closeSearch();
+      else if(floating())closeNav();
+      return;
+    }
+    // "/" opens search from anywhere (the shared shortcut in
+    // _chrome_page_js.html focuses #goto-box; here that box lives in the
+    // overlay, so the overlay has to open first).
+    if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+      var t=document.activeElement;
+      if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+      e.preventDefault();openSearch();
+    }
+  });
+
+  // The Helper's "show me" (#kk=nav-...) can point at a link inside a closed
+  // drawer — open the drawer so the flash has something to land on.
+  function reveal(){
+    var m=(location.hash||'').match(/^#kk=([\w-]+)$/);if(!m)return;
+    var el=document.querySelector('[data-kk="'+m[1]+'"]');
+    if(el&&pane.contains(el)&&!pinned()&&!floating())openNav();
+  }
+  document.addEventListener('DOMContentLoaded',reveal);
+  window.addEventListener('hashchange',reveal);
+  syncBurger();
+})();
+</script>

@@ -1,0 +1,123 @@
+{# File picker (report #50): pick a DOCUMENT that already lives on the file
+   server and drop its full path into a form input. Sibling of
+   _folder_picker.html — same Explorer-styled modal, same /api/folders
+   endpoint (with files=1), same UNC-only display rule (#33/#36) — but the
+   thing you select is a file, not a folder.
+
+   Include once per page, call openFilePicker('input-id'[, 'label-id']) from a
+   Browse button. If a label element id is passed, its text becomes the chosen
+   file's name, so a form can show "SO CAL GAS 06-2026.pdf" instead of 180
+   characters of path.
+
+   No native dialog here on purpose: the desk connector speaks pick_folder
+   only (desk_commands.py), and teaching it pick_file needs every desk's
+   connector restarted — a person's job, not a page's. #}
+
+<div id="flp-overlay" style="display:none;position:fixed;inset:0;background:rgba(20,30,50,.45);z-index:1000;"
+     onclick="if(event.target===this)flpClose()">
+  <div style="max-width:700px;margin:6vh auto 0;background:#f7f8fa;border:1px solid #c9ced6;border-radius:8px;
+              box-shadow:0 12px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:82vh;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fff;border-bottom:1px solid #e3e6ec;">
+      <div style="font-size:.85rem;font-weight:600;">&#128196; Choose a document on the file server</div>
+      <span onclick="flpClose()" style="cursor:pointer;font-size:1.1rem;line-height:1;padding:0 4px;" title="Close">&times;</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;padding:8px 10px;background:#fff;border-bottom:1px solid #e3e6ec;">
+      <button type="button" class="btn btn-ghost btn-sm" id="flp-back" onclick="flpBack()" disabled
+              title="Back" style="padding:2px 9px;">&#8592;</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="flp-up" onclick="flpUp()" disabled
+              title="Up one level" style="padding:2px 9px;">&#8593;</button>
+      <div id="flp-crumbs" style="flex:1;border:1px solid #d5dae2;border-radius:4px;background:#fff;
+           padding:4px 8px;font-size:.8rem;white-space:nowrap;overflow-x:auto;line-height:1.7;"></div>
+    </div>
+    <div id="flp-list" style="flex:1;overflow-y:auto;background:#fff;margin:8px 10px;border:1px solid #d5dae2;
+         border-radius:4px;min-height:240px;padding:4px;"></div>
+    <div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #e3e6ec;">
+      <span style="font-size:.82rem;color:var(--mid,#667);flex-shrink:0;">File:</span>
+      <span id="flp-current" style="flex:1;font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+            title="">&mdash;</span>
+      <button type="button" class="btn btn-primary btn-sm" id="flp-choose" onclick="flpChoose()" disabled
+              style="white-space:nowrap;flex-shrink:0;">Use this document</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="flpClose()"
+              style="white-space:nowrap;flex-shrink:0;">Cancel</button>
+    </div>
+  </div>
+</div>
+<script>
+var _flp = {target:null, label:null, path:null, unc:null, history:[],
+            parent:null, sel:null, selName:null};
+
+function openFilePicker(inputId, labelId){
+  _flp.target = document.getElementById(inputId);
+  _flp.label  = labelId ? document.getElementById(labelId) : null;
+  _flp.sel = null; _flp.selName = null;
+  document.getElementById('flp-overlay').style.display = '';
+  _flp.history = [];
+  // Seed at the folder holding whatever is already in the field, not the file.
+  var seed = (_flp.target && _flp.target.value || '').trim();
+  var cut = Math.max(seed.lastIndexOf('\\'), seed.lastIndexOf('/'));
+  flpBrowse(cut > 0 ? seed.slice(0, cut) : null, true);
+}
+function flpClose(){ document.getElementById('flp-overlay').style.display = 'none'; }
+function flpChoose(){
+  if(_flp.target && _flp.sel){
+    _flp.target.value = _flp.sel;
+    if(_flp.label){ _flp.label.textContent = _flp.selName || _flp.sel; }
+    _flp.target.dispatchEvent(new Event('change'));
+  }
+  flpClose();
+}
+function flpBack(){
+  if(_flp.history.length < 2) return;
+  _flp.history.pop();
+  flpBrowse(_flp.history.pop(), false);
+}
+function flpUp(){ if(_flp.parent !== undefined && _flp.parent !== null) flpBrowse(_flp.parent || null, false); }
+function flpSelect(el, unc, name){
+  var rows = document.querySelectorAll('#flp-list .flp-row');
+  for(var i=0;i<rows.length;i++){ rows[i].style.background=''; rows[i].style.outline=''; }
+  el.style.background = 'var(--pale,#e8f0fe)';
+  el.style.outline = '1px solid var(--light-blue,#BDD7EE)';
+  _flp.sel = unc; _flp.selName = name;
+  var cur = document.getElementById('flp-current');
+  cur.textContent = name; cur.title = unc;
+  document.getElementById('flp-choose').disabled = false;
+}
+function flpBrowse(path, resetHist){
+  var url = '/api/folders?files=1' + (path ? ('&path=' + encodeURIComponent(path)) : '');
+  fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    if(d.error){ if(path) return flpBrowse(null, resetHist);
+      return flpMsg(d.error); }
+    _flp.path = d.path || null; _flp.unc = d.unc || null;
+    _flp.sel = null; _flp.selName = null;
+    document.getElementById('flp-choose').disabled = true;
+    document.getElementById('flp-current').textContent = '—';
+    if(resetHist){ _flp.history = []; }
+    if(_flp.history[_flp.history.length-1] !== _flp.path){ _flp.history.push(_flp.path); }
+    document.getElementById('flp-back').disabled = _flp.history.length < 2;
+    var crumbs = (d.crumbs || []);
+    _flp.parent = crumbs.length ? crumbs[crumbs.length-1].path : (d.path ? null : undefined);
+    document.getElementById('flp-up').disabled = !d.path;
+    var chips = crumbs.map(function(c){
+      return '<a href="#" style="text-decoration:none;" onclick="flpBrowse(' + flpQ(c.path) + ');return false;">' + flpEsc(c.name) + '</a>';
+    });
+    chips.unshift('<a href="#" style="text-decoration:none;" onclick="flpBrowse(null);return false;">&#128421; File server</a>');
+    if(d.path){ chips.push('<strong>' + flpEsc((d.unc||'').split('\\').filter(Boolean).pop() || '') + '</strong>'); }
+    document.getElementById('flp-crumbs').innerHTML = chips.join(' <span style="color:#bbb;">&rsaquo;</span> ');
+    var rows = (d.dirs || []).map(function(f){
+      return '<div class="flp-row" style="padding:5px 10px;border-radius:4px;cursor:default;font-size:.88rem;user-select:none;" ' +
+             'ondblclick="flpBrowse(' + flpQ(f.path) + ', false)" title="Double-click to open">&#128193; ' + flpEsc(f.name) + '</div>';
+    });
+    rows = rows.concat((d.files || []).map(function(f){
+      return '<div class="flp-row" style="padding:5px 10px;border-radius:4px;cursor:default;font-size:.88rem;user-select:none;" ' +
+             'onclick="flpSelect(this, ' + flpQ(f.unc) + ', ' + flpQ(f.name) + ')" ' +
+             'ondblclick="flpSelect(this, ' + flpQ(f.unc) + ', ' + flpQ(f.name) + ');flpChoose();">&#128196; ' + flpEsc(f.name) + '</div>';
+    }));
+    document.getElementById('flp-list').innerHTML =
+      rows.join('') || '<div style="padding:14px;color:var(--mid,#667);font-size:.85rem;">Nothing here to pick.</div>';
+  }).catch(function(){ flpMsg('Could not reach the server.'); });
+}
+function flpMsg(html){ document.getElementById('flp-list').innerHTML =
+  '<div style="padding:14px;color:var(--mid,#667);font-size:.85rem;">' + html + '</div>'; }
+function flpEsc(s){ var d = document.createElement('span'); d.textContent = s || ''; return d.innerHTML; }
+function flpQ(s){ return JSON.stringify(s).replace(/"/g, '&quot;'); }
+</script>

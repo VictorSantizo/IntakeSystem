@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>&#128202; Ops Reports</h1>
+<p class="subtitle">The data-side reports the server generates on a schedule. These are the same files that live in
+<code>\\LACKSSERVER2021\File-Cabinet\_OPS INDEX</code> &mdash; readable here without hunting through the share.</p>
+
+{% if stale %}
+<div class="alert" style="background:#FDECEA;color:#B71C1C;border-left:6px solid var(--red);font-size:.95rem;">
+  <strong style="font-size:1.05rem;">&#9888;&#65039; The 6 AM scheduled task looks like it FAILED.</strong><br>
+  {% for r in stale %}
+    <b>{{ r.title }}</b> &mdash; {% if r.exists %}last run {{ r.ago }} ({{ r.stamp }}){% else %}never generated{% endif %}.<br>
+  {% endfor %}
+  <span style="font-size:.85rem;">Check Task Scheduler on LACKSSERVER2021 (<code>daily_bigpicture.bat</code>) and the
+  <a href="/ops-reports/view/bigpicture_daily.log" style="color:#B71C1C;font-weight:bold;">6 AM task log</a>.</span>
+</div>
+{% endif %}
+
+<table style="width:100%;border-collapse:collapse;background:var(--white);border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);font-size:.88rem;">
+  <tr style="background:var(--navy);color:#fff;text-align:left;">
+    <th style="padding:9px 12px;">Report</th>
+    <th style="padding:9px 12px;">What it is</th>
+    <th style="padding:9px 12px;white-space:nowrap;">Last run</th>
+    <th style="padding:9px 12px;">Status</th>
+  </tr>
+  {% for r in rows %}
+  <tr style="border-bottom:1px solid #eee;{% if r.stale %}background:#FDECEA;{% endif %}">
+    <td style="padding:9px 12px;vertical-align:top;white-space:nowrap;">
+      {% if r.exists %}<a href="/ops-reports/view/{{ r.name }}" style="font-weight:bold;color:var(--blue);">{{ r.title }}</a>
+      {% else %}<span style="font-weight:bold;color:var(--mid);">{{ r.title }}</span>{% endif %}
+      <br><code style="font-size:.72rem;color:var(--mid);">{{ r.name }}</code>
+    </td>
+    <td style="padding:9px 12px;vertical-align:top;color:var(--dark);">{{ r.desc }}
+      {% if r.name == 'HARVEST.html' and held %}
+      <div style="margin-top:5px;"><span style="background:#FFF8E1;color:#7A5800;border-radius:10px;padding:2px 10px;font-size:.8rem;font-weight:bold;">&#9888; {{ held }} held for a human</span></div>
+      {% endif %}
+      {% if r.tool and r.exists %}
+      <div style="margin-top:5px;"><a href="{{ r.tool[0] }}" class="btn btn-primary btn-sm">&#128269; {{ r.tool[1] }}</a></div>
+      {% endif %}
+    </td>
+    <td style="padding:9px 12px;vertical-align:top;white-space:nowrap;">
+      {% if r.exists %}{{ r.stamp }}<br><span style="color:var(--mid);font-size:.8rem;">{{ r.ago }}</span>
+      {% else %}<span style="color:var(--mid);">&mdash;</span>{% endif %}
+    </td>
+    <td style="padding:9px 12px;vertical-align:top;white-space:nowrap;">
+      {% if r.stale %}<span style="background:var(--red);color:#fff;border-radius:10px;padding:2px 10px;font-size:.78rem;font-weight:bold;">{% if r.exists %}STALE{% else %}MISSING{% endif %}</span>
+      {% elif not r.exists %}<span style="color:var(--mid);font-size:.8rem;">not on disk</span>
+      {% elif r.daily %}<span style="background:#E8F5E9;color:#2E7D32;border-radius:10px;padding:2px 10px;font-size:.78rem;font-weight:bold;">Fresh</span>
+      {% else %}<span style="color:var(--mid);font-size:.8rem;">one-shot</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p class="subtitle" style="margin-top:14px;">The three daily reports are rewritten by the 6&nbsp;AM scheduled task on the server &mdash; anything older than about a day means the task did not run and is flagged above. One-shot artifacts don't age out.</p>
+{% endblock %}

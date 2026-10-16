@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+  <h1>&#128225; Expected Bills</h1>
+  <a href="/bills" class="btn btn-ghost btn-sm">All Bills</a>
+</div>
+<p class="subtitle">The bills that should arrive every month (or quarter/year) &mdash; and whether they have.
+  Current period: <strong>{{ month_label }}</strong>.
+  {% if waiting %}<span style="color:#B45309;font-weight:600;">{{ waiting }} not seen yet.</span>{% endif %}</p>
+
+{% if msg %}<div class="alert alert-info">{{ msg }}</div>{% endif %}
+
+{% if statuses %}
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">Checklist</div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap"><table class="sortable">
+      <thead><tr><th style="width:110px;">Status</th><th>Vendor</th><th>Account #</th><th>Entity</th><th>Property</th><th>Cadence</th><th>Typical</th><th>Last seen</th>{% if is_admin %}<th></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for s in statuses %}
+      <tr {% if s.state == 'waiting' %}style="background:#FFF8E1;"{% endif %}>
+        <td>
+          {% if s.state == 'arrived' %}<span class="badge-status s-processed">&#10003; Arrived</span>
+          {% elif s.state == 'queue' %}<span class="badge-status s-in-progress">&#9203; In review</span>
+          {% else %}<span class="badge-status s-on-hold">&#9888; Not seen</span>{% endif %}
+        </td>
+        <td style="font-weight:600;">{{ s.vendor }}</td>
+        <td style="font-size:.82rem;">{{ s.account_number or '—' }}</td>
+        <td><code>{{ s.entity_code or '—' }}</code></td>
+        <td><code>{{ s.property_code or '—' }}</code></td>
+        <td style="font-size:.82rem;">{{ s.cadence }}</td>
+        <td class="amount">{% if s.typical_amount %}${{ "{:,.2f}".format(s.typical_amount) }}{% else %}—{% endif %}</td>
+        <td style="font-size:.82rem;">{{ s.last_seen or '—' }}</td>
+        {% if is_admin %}
+        <td style="white-space:nowrap;">
+          <form method="POST" action="/expected/{{ s.id }}/toggle" style="display:inline;margin:0;">
+            <input type="hidden" name="active" value="0">
+            <button type="submit" class="btn btn-ghost btn-sm" title="Pause — keep the row but stop expecting it">&#10074;&#10074;</button>
+          </form>
+          <form method="POST" action="/expected/{{ s.id }}/delete" style="display:inline;margin:0;"
+                onsubmit="return confirm('Stop expecting {{ s.vendor }}? (This only removes the reminder, no records.)')">
+            <button type="submit" class="btn btn-ghost btn-sm" style="border-color:#c00;color:#c00;">&#10005;</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">Nothing is being tracked yet. Add the bills that should arrive every month below
+  {% if suggestions %}&mdash; or start from the suggestions found in 13 years of filing history.{% endif %}</div>
+{% endif %}
+
+{% if is_admin and paused %}
+<div style="margin-bottom:20px;font-size:.88rem;color:var(--mid);">
+  Paused:
+  {% for p in paused %}
+  <form method="POST" action="/expected/{{ p.id }}/toggle" style="display:inline;margin:0 6px;">
+    <input type="hidden" name="active" value="1">
+    <span>{{ p.vendor }}</span>
+    <button type="submit" class="btn btn-ghost btn-sm" title="Resume expecting this bill">&#9654; Resume</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if is_admin %}
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">+ Expect a bill</div>
+  <div class="card-body">
+    <form method="POST" action="/expected/add" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-group"><label>Vendor *</label><input type="text" name="vendor" required placeholder="SoCal Gas"></div>
+      <div class="form-group"><label>Account #</label><input type="text" name="account_number" placeholder="optional"></div>
+      <div class="form-group"><label>Entity</label>
+        <select name="entity_code"><option value="">—</option>{% for e in cfg.entities %}<option value="{{ e.code }}">{{ e.code }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label>Property</label><input type="text" name="property_code" placeholder="e.g. TL222" style="width:110px;"></div>
+      <div class="form-group"><label>Cadence</label>
+        <select name="cadence"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></div>
+      <div class="form-group"><label>Typical $</label><input type="text" name="typical_amount" placeholder="0.00" style="width:100px;"></div>
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+  </div>
+</div>
+
+{% if rhythms %}
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <span>&#128200; Mined payment rhythms ({{ rhythms|length }}) &mdash; from the paid archive</span>
+    <form method="POST" action="/expected/adopt_rhythms" style="margin:0;"
+          onsubmit="return confirm('Put all {{ rhythms|length }} mined rhythms on the radar? Each can be paused or removed individually afterwards.')">
+      <button type="submit" class="btn btn-primary btn-sm">Adopt all {{ rhythms|length }}</button>
+    </form>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div style="padding:12px 20px;font-size:.88rem;color:var(--mid);">
+      Measured from the paid-bills folders (the backfill datasets): how often each vendor actually gets paid, for how much,
+      and when the next payment looks due. Adopting creates a reminder on the checklist above &mdash; nothing else changes.
+      A red &ldquo;quiet&rdquo; chip means the rhythm says a payment should have happened already.
+    </div>
+    <div class="table-wrap"><table class="sortable">
+      <thead><tr><th>Vendor</th><th>Rhythm</th><th>Typical</th><th>Entity</th><th>Last paid</th><th>Next due</th><th></th></tr></thead>
+      <tbody>
+      {% for s in rhythms %}
+      <tr>
+        <td style="font-weight:600;">{{ s.vendor }}</td>
+        <td style="font-size:.85rem;">{{ s.rhythm }} <span style="color:var(--mid);">({{ s.n }} payments)</span></td>
+        <td class="amount">{% if s.typical %}${{ "{:,.2f}".format(s.typical) }}{% else %}&mdash;{% endif %}</td>
+        <td><code>{{ s.entity or '—' }}</code></td>
+        <td style="font-size:.82rem;">{{ s.last }}</td>
+        <td style="font-size:.82rem;">{{ s.next }}
+          {% if s.overdue %}<span style="background:#FDECEA;color:#B71C1C;border-radius:10px;padding:1px 8px;font-size:.75rem;font-weight:bold;">quiet</span>{% endif %}</td>
+        <td>
+          <form method="POST" action="/expected/add" style="margin:0;">
+            <input type="hidden" name="vendor" value="{{ s.vendor }}">
+            <input type="hidden" name="entity_code" value="{{ s.entity }}">
+            <input type="hidden" name="typical_amount" value="{{ s.typical or '' }}">
+            <input type="hidden" name="cadence" value="{{ s.cadence }}">
+            <input type="hidden" name="source" value="suggested">
+            <button type="submit" class="btn btn-success btn-sm">+ Expect {{ s.cadence }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</div>
+{% endif %}
+
+{% if suggestions %}
+<div class="card">
+  <div class="card-header">&#128161; Suggestions from 13 years of history</div>
+  <div class="card-body" style="padding:0;">
+    <div style="padding:12px 20px;font-size:.88rem;color:var(--mid);">
+      These payees appear in at least 24 of the last 36 months of the filing archive &mdash; strong candidates
+      for the checklist. Adding one just creates a reminder; nothing else changes.
+    </div>
+    <div class="table-wrap"><table class="sortable">
+      <thead><tr><th>Vendor</th><th>Months seen (of 36)</th><th>Avg amount</th><th>Entity (most recent)</th><th></th></tr></thead>
+      <tbody>
+      {% for s in suggestions %}
+      <tr>
+        <td style="font-weight:600;">{{ s.vendor }}</td>
+        <td>{{ s.months }}</td>
+        <td class="amount">{% if s.avg_amount %}${{ "{:,.2f}".format(s.avg_amount) }}{% else %}—{% endif %}</td>
+        <td><code>{{ s.entity or '—' }}</code></td>
+        <td>
+          <form method="POST" action="/expected/add" style="margin:0;">
+            <input type="hidden" name="vendor" value="{{ s.vendor }}">
+            <input type="hidden" name="entity_code" value="{{ s.entity }}">
+            <input type="hidden" name="typical_amount" value="{{ s.avg_amount or '' }}">
+            <input type="hidden" name="cadence" value="monthly">
+            <input type="hidden" name="source" value="suggested">
+            <button type="submit" class="btn btn-success btn-sm">+ Expect monthly</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

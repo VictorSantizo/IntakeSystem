@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1>&#127970; Entities</h1>
+  <a href="/settings" class="btn btn-ghost btn-sm">&larr; Settings</a>
+</div>
+<p class="subtitle">Add, edit, or remove entities. Changes take effect immediately. Renaming a <strong>code</strong> updates every property and record that uses it.</p>
+
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+{% if err %}<div class="alert alert-warning">&#9888;&#65039; {{ err }}</div>{% endif %}
+
+<div class="card" style="max-width:760px;margin-bottom:20px;"><div class="card-header">Add Entity</div><div class="card-body">
+  <form method="POST" action="/settings/entities/add" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="form-group" style="flex:0 0 160px;"><label>Code *</label><input type="text" name="code" placeholder="e.g. PP" required></div>
+    <div class="form-group" style="flex:1;min-width:220px;"><label>Name *</label><input type="text" name="name" placeholder="e.g. PP Properties" required></div>
+    <button type="submit" class="btn btn-primary">+ Add</button>
+  </form>
+</div></div>
+
+<div class="card" style="max-width:760px;"><div class="card-header">Existing Entities ({{ cfg.entities|length }})</div>
+<div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+  <thead><tr><th>Code</th><th>Name</th><th style="width:170px;"></th></tr></thead>
+  <tbody>
+  {% for e in cfg.entities %}
+  <tr>
+    <td colspan="3" style="padding:0;">
+      <form method="POST" action="/settings/entities/{{ e.code }}/update" style="display:flex;gap:8px;align-items:center;margin:0;padding:6px 12px;">
+        <input type="text" name="code" value="{{ e.code }}" style="flex:0 0 130px;" required title="Entity code">
+        <input type="text" name="name" value="{{ e.name }}" style="flex:1;min-width:200px;" required title="Entity name">
+        <button type="submit" class="btn btn-ghost btn-sm">Save</button>
+        <button type="submit" formaction="/settings/entities/{{ e.code }}/delete" class="btn btn-sm" style="background:#c00;color:#fff;"
+                formnovalidate data-entity-code="{{ e.code }}"
+                onclick="return confirm('Delete entity ' + this.dataset.entityCode + '? (Only allowed if no properties use it.)')">&#128465;</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="3" style="text-align:center;padding:30px;color:#999;">No entities yet.</td></tr>{% endfor %}
+  </tbody></table></div></div></div>
+{% endblock %}

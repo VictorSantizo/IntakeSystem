@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<style>
+  :root{--navy:#1F3864;--blue:#2E75B6;--pale:#DEEAF1;--red:#C00000;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;background:#f0f2f5;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+  .card{background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.12);width:100%;max-width:380px;overflow:hidden;}
+  .card-header{background:var(--navy);color:#fff;padding:28px 32px;text-align:center;}
+  .card-header .icon{font-size:2.4rem;margin-bottom:8px;}
+  .card-header h1{font-size:1.3rem;font-weight:bold;letter-spacing:.3px;}
+  .card-header p{font-size:.85rem;color:rgba(255,255,255,.7);margin-top:4px;}
+  .card-body{padding:28px 32px;}
+  label{display:block;font-size:.85rem;font-weight:600;color:#555;margin-bottom:6px;}
+  select{width:100%;padding:10px 14px;border:1.5px solid #ccc;border-radius:7px;font-size:.95rem;color:#333;background:#fff;outline:none;transition:border .15s;}
+  select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,117,182,.15);}
+  .btn{display:block;width:100%;padding:11px;margin-top:18px;border:none;border-radius:7px;background:var(--blue);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .15s;}
+  .btn:hover{opacity:.88;}
+  .error{background:#FDE8E8;color:var(--red);border-radius:7px;padding:10px 14px;font-size:.87rem;margin-bottom:14px;border-left:4px solid var(--red);}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <div class="icon">&#127968;</div>
+    <h1>Klick Klack</h1>
+    <p>Select your name to continue</p>
+  </div>
+  <div class="card-body">
+    {% if timed_out and not error %}<div class="error" style="background:#FFF8E1;color:#7A5800;border-left-color:var(--yellow);">&#9203; Your session timed out. Please sign in again.</div>{% endif %}
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST">
+      {# Standalone page (doesn't extend base.html), so base's auto-injector
+         never runs here — the CSRF token must be rendered in directly. #}
+      <input type="hidden" name="csrf_token" value="{{ session.get('csrf', '') }}">
+      <label for="name">Who are you?</label>
+      <select name="name" id="name" required style="margin-bottom:16px;">
+        <option value="">— Select your name —</option>
+        {% for s in cfg.staff %}
+          <option value="{{ s.name }}">{{ s.name }}</option>
+        {% endfor %}
+      </select>
+      <label for="password">Password</label>
+      <input type="password" name="password" id="password" required autocomplete="current-password"
+             style="width:100%;padding:10px 14px;border:1.5px solid #ccc;border-radius:7px;font-size:.95rem;color:#333;outline:none;transition:border .15s;">
+      <button type="submit" class="btn">Sign In &rarr;</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

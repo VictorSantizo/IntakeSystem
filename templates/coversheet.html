@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KLR Mail Batch Cover Sheet</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Monoton&family=Bungee&family=Rock+Salt&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Bungee', 'Arial Black', sans-serif;
+    background: #f4f4f8;
+    color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 7.5in;
+    min-height: 9.7in;
+    margin: 18px auto;
+    background: #fff;
+    border: 10px solid #111;
+    border-radius: 18px;
+    padding: 28px 34px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* tie-dye-ish groovy banner */
+  .banner {
+    text-align: center;
+    border: 5px solid #111;
+    border-radius: 14px;
+    padding: 14px 10px 18px;
+    background:
+      radial-gradient(circle at 18% 30%, #ffd23f 0 14%, transparent 15%),
+      radial-gradient(circle at 82% 28%, #ff6f91 0 13%, transparent 14%),
+      radial-gradient(circle at 50% 80%, #4cc9f0 0 16%, transparent 17%),
+      linear-gradient(120deg, #f72585, #7209b7 45%, #3a0ca3 70%, #4361ee);
+    color: #fff;
+    text-shadow: 2px 2px 0 #111;
+  }
+  .banner .peace { font-size: 30px; letter-spacing: 8px; }
+  .banner h1 {
+    font-family: 'Monoton', 'Bungee', cursive;
+    font-weight: normal;
+    margin: 4px 0 2px;
+    font-size: 34px;
+    line-height: 1.05;
+  }
+  .banner .sub {
+    font-family: 'Rock Salt', cursive;
+    font-size: 12px;
+    text-shadow: 1px 1px 0 #111;
+    margin-top: 6px;
+  }
+  /* the machine-read marker — keep this exact text, big & black */
+  .marker {
+    text-align: center;
+    font-family: 'Arial Black', sans-serif;
+    letter-spacing: 2px;
+    font-size: 15px;
+    margin: 16px 0 6px;
+    color: #111;
+  }
+  .lede {
+    text-align: center;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    font-size: 13px;
+    color: #333;
+    margin-bottom: 8px;
+  }
+  .date-zone {
+    border: 5px dashed #111;
+    border-radius: 14px;
+    padding: 16px 12px 20px;
+    margin: 10px 0 18px;
+    text-align: center;
+    background: #fffdf2;
+  }
+  .date-zone .label {
+    font-family: 'Bungee', 'Arial Black', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  .date-zone .hint { font-family: Arial, sans-serif; font-weight: bold; font-size: 11px; color:#555; margin-bottom: 14px; }
+  .boxes { display: flex; justify-content: center; align-items: flex-end; gap: 10px; }
+  .grp { text-align: center; }
+  .grp .cells { display: flex; gap: 6px; }
+  .cell {
+    width: 46px; height: 60px;
+    border: 4px solid #111;
+    border-radius: 8px;
+    background: #fff;
+  }
+  input.cell {
+    font-family: 'Bungee', 'Arial Black', sans-serif;
+    font-size: 34px; text-align: center; line-height: 60px;
+    padding: 0; color: #111; outline: none;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  input.cell:focus { border-color: #f72585; background: #fff7fb; }
+  .qfill {
+    text-align: center; font-family: Arial, sans-serif; font-size: 12px;
+    color: #444; margin: 0 0 12px;
+  }
+  .qfill input[type=date] { font-family: Arial, sans-serif; font-size: 13px; padding: 3px 6px; }
+  .qfill .mini {
+    font-family: 'Bungee', sans-serif; font-size: 11px; padding: 5px 12px;
+    border: 2px solid #111; border-radius: 8px; background: #ffd23f; cursor: pointer; margin-left: 6px;
+  }
+  .grp .cap { font-family: Arial, sans-serif; font-weight: bold; font-size: 12px; margin-top: 6px; letter-spacing: 2px; }
+  .slash { font-size: 40px; font-weight: bold; padding-bottom: 22px; }
+  .meta { display: flex; gap: 14px; margin-top: 6px; font-family: Arial, sans-serif; }
+  .meta .field { flex: 1; }
+  .meta .field .ln { border-bottom: 3px solid #111; height: 34px; }
+  .meta .field input.ln {
+    width: 100%; border: none; border-bottom: 3px solid #111; height: 34px;
+    font-family: Arial, sans-serif; font-size: 16px; outline: none; background: transparent;
+  }
+  .meta .field .cap { font-weight: bold; font-size: 11px; letter-spacing: 1px; margin-top: 4px; color:#333; }
+  .steps {
+    margin-top: 20px;
+    border: 4px solid #111;
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-family: Arial, sans-serif;
+    font-size: 12.5px;
+    background: #f0fbff;
+  }
+  .steps b { font-family: 'Bungee', sans-serif; font-size: 13px; }
+  .steps ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.7; }
+  .footer {
+    text-align: center;
+    margin-top: 18px;
+    font-family: 'Rock Salt', cursive;
+    font-size: 12px;
+    color: #7209b7;
+  }
+  .corner { position: absolute; font-size: 26px; opacity: .85; }
+  .c1 { top: 84px; left: 16px; } .c2 { top: 84px; right: 16px; }
+  .c3 { bottom: 16px; left: 16px; } .c4 { bottom: 16px; right: 16px; }
+  .toolbar { text-align: center; margin: 14px; }
+  .btn {
+    font-family: 'Bungee', sans-serif; font-size: 15px; cursor: pointer;
+    background: #f72585; color: #fff; border: 3px solid #111; border-radius: 10px;
+    padding: 10px 22px; text-shadow: 1px 1px 0 #111;
+  }
+  @media print {
+    body { background: #fff; }
+    .toolbar, .qfill { display: none; }
+    .page { margin: 0 auto; border-width: 8px; page-break-after: avoid; }
+    @page { size: letter; margin: 0.3in; }
+    input.cell:focus { border-color: #111; background: #fff; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">&#127881; Print this Cover Sheet</button>
+  </div>
+
+  <div class="page">
+    <div class="corner c1">&#9774;</div>
+    <div class="corner c2">&#11088;</div>
+    <div class="corner c3">&#9889;</div>
+    <div class="corner c4">&#10052;</div>
+
+    <div class="banner">
+      <div class="peace">&#9774; &#11088; &#9835; &#11088; &#9774;</div>
+      <h1>Mail Batch</h1>
+      <div class="sub">~ groovy filing for a rock-star landlady ~</div>
+    </div>
+
+    <div class="marker">KLR MAIL BATCH COVER SHEET</div>
+    <div class="lede">Place me on top of the mail folder, then scan the whole stack. I tell the system when this mail arrived.</div>
+
+    <div class="date-zone">
+      <div class="label">&#128229; RECEIVED DATE</div>
+      <div class="hint">Type it here before printing, or pen it in after &mdash; fill any boxes, leave the rest blank ✌</div>
+      <div class="qfill">
+        Quick-fill from a date:
+        <input type="date" id="qf-date" onchange="quickFill(this.value)">
+        <button type="button" class="mini" onclick="quickFillToday()">TODAY</button>
+        <button type="button" class="mini" onclick="fillMonthYear()" style="background:#4cc9f0;">THIS MONTH</button>
+        <button type="button" class="mini" onclick="clearCells()" style="background:#eee;">CLEAR</button>
+        <div style="margin-top:4px;font-size:11px;color:#777;">(tip: fill MONTH + YEAR, print a stack, then just pen the DAY on each)</div>
+      </div>
+      <div class="boxes">
+        <div class="grp">
+          <div class="cells"><input class="cell" data-grp="m" maxlength="1" inputmode="numeric"><input class="cell" data-grp="m" maxlength="1" inputmode="numeric"></div>
+          <div class="cap">MONTH</div>
+        </div>
+        <div class="slash">/</div>
+        <div class="grp">
+          <div class="cells"><input class="cell" data-grp="d" maxlength="1" inputmode="numeric"><input class="cell" data-grp="d" maxlength="1" inputmode="numeric"></div>
+          <div class="cap">DAY</div>
+        </div>
+        <div class="slash">/</div>
+        <div class="grp">
+          <div class="cells"><input class="cell" data-grp="y" maxlength="1" inputmode="numeric"><input class="cell" data-grp="y" maxlength="1" inputmode="numeric"><input class="cell" data-grp="y" maxlength="1" inputmode="numeric"><input class="cell" data-grp="y" maxlength="1" inputmode="numeric"></div>
+          <div class="cap">YEAR</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div class="field"><input class="ln" type="text"><div class="cap">SCANNED BY (optional)</div></div>
+      <div class="field"><input class="ln" type="text"><div class="cap">FOLDER / NOTES (optional)</div></div>
+    </div>
+
+    <div class="steps">
+      <b>&#9733; How to use</b>
+      <ol>
+        <li>Print a fresh sheet for each folder (or photocopy a stack of blanks).</li>
+        <li>Write the <b>received date</b> in the big boxes above.</li>
+        <li>Lay it <b>on top</b> of that folder's mail and scan the whole pile.</li>
+        <li>The system reads this sheet and stamps that date on <b>every</b> file behind it &mdash; no typing.</li>
+        <li>Wrong date later? Fix it in Review with the date picker (it'll offer to fix the whole batch).</li>
+      </ol>
+    </div>
+
+    <div class="footer">&#9774; keep on rockin' &amp; filin' &#9835;</div>
+  </div>
+
+<script>
+  function setCells(grp, str){
+    str = str || '';
+    const cells = [...document.querySelectorAll('input.cell[data-grp="'+grp+'"]')];
+    cells.forEach((c, i) => { c.value = str[i] || ''; });
+  }
+  function quickFill(v){
+    if(!v) return;
+    const parts = v.split('-');           // YYYY-MM-DD from the date picker
+    setCells('y', parts[0]); setCells('m', parts[1]); setCells('d', parts[2]);
+  }
+  function quickFillToday(){
+    const t = new Date(), p = n => String(n).padStart(2,'0');
+    const v = t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate());
+    document.getElementById('qf-date').value = v;
+    quickFill(v);
+  }
+  // Fill current month + year, leave the DAY blank to pen in per folder.
+  function fillMonthYear(){
+    const t = new Date(), p = n => String(n).padStart(2,'0');
+    setCells('m', p(t.getMonth()+1));
+    setCells('y', String(t.getFullYear()));
+    setCells('d', '');
+    document.getElementById('qf-date').value = '';
+  }
+  function clearCells(){
+    document.querySelectorAll('input.cell').forEach(c => c.value = '');
+    document.getElementById('qf-date').value = '';
+  }
+  // Type one digit per box and jump to the next; backspace jumps back.
+  const allCells = [...document.querySelectorAll('input.cell')];
+  allCells.forEach((c, i) => {
+    c.addEventListener('input', () => {
+      c.value = c.value.replace(/\D/g, '').slice(0,1);
+      if (c.value && i < allCells.length - 1) allCells[i+1].focus();
+    });
+    c.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !c.value && i > 0) allCells[i-1].focus();
+    });
+  });
+
+  // Default to the current month + year filled in (day left blank) on load.
+  fillMonthYear();
+</script>
+</body>
+</html>

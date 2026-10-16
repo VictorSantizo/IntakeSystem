@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+  <h1>&#129529; Legacy Duplicates</h1>
+  <a href="/review/triage" class="btn btn-ghost btn-sm">&larr; Duplicate Triage</a>
+</div>
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+<p class="subtitle" style="max-width:900px;">Before July 7 the system didn't catch a document arriving twice,
+  so the same file could be confirmed as two (or more) records — which double-counts it in the owed totals.
+  Merging folds each group into ONE record: the survivor keeps everything (payment, copies on file, history),
+  blanks are filled from the absorbed copies, and <strong>no file on the server is moved or deleted</strong>.
+  Groups whose copies carry <em>different</em> payment details are never merged automatically — those could be
+  a double payment and need your eyes.</p>
+
+{% if groups %}
+<form method="POST" action="/review/legacy_dupes/merge_all" style="margin-bottom:14px;"
+      onsubmit="return confirm('Merge all {{ safe_count }} safe group(s)? Each group becomes one record; nothing on disk changes.')">
+  <button type="submit" class="btn btn-success" {% if safe_count == 0 %}disabled{% endif %}>
+    &#129529; Merge all {{ safe_count }} safe group{{ 's' if safe_count != 1 else '' }}</button>
+</form>
+
+<div class="card"><div class="card-body" style="padding:0;">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Keeps</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Absorbs</th><th style="width:160px;"></th></tr></thead>
+    <tbody>
+    {% for g in groups %}
+    <tr {% if g.conflict %}style="background:#FDE8E8;"{% endif %}>
+      <td><a class="recno" href="/entry/{{ g.keeper.id }}/view" target="_blank">{{ g.keeper.record_no or '#' ~ g.keeper.id }}</a></td>
+      <td>{{ g.keeper.vendor or '—' }}</td>
+      <td class="amount">{% if g.keeper.amount %}${{ "{:,.2f}".format(g.keeper.amount) }}{% else %}—{% endif %}</td>
+      <td>{{ g.keeper.status }}</td>
+      <td style="font-size:.85rem;">
+        {% for r in g.records if r.id != g.keeper.id %}
+          <a href="/entry/{{ r.id }}/view" target="_blank" style="color:var(--mid);">{{ r.record_no or '#' ~ r.id }}</a> ({{ r.status }}){% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+      <td style="white-space:nowrap;">
+        {% if g.conflict %}
+          <span style="color:#B71C1C;font-size:.8rem;font-weight:600;" title="The copies carry different payment details — possible double payment. Open both records and resolve by hand.">&#9888;&#65039; check payments</span>
+        {% else %}
+        <form method="POST" action="/review/legacy_dupes/merge" style="margin:0;"
+              onsubmit="return confirm('Merge this group into record {{ g.keeper.record_no or '#' ~ g.keeper.id }}?')">
+          <input type="hidden" name="hash" value="{{ g.hash }}">
+          <button type="submit" class="btn btn-success btn-sm">Merge &rarr; {{ g.keeper.record_no or '#' ~ g.keeper.id }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div></div>
+{% else %}
+<div class="alert alert-info">&#10003; No double-logged records. Every document in the log is one record.</div>
+{% endif %}
+{% endblock %}

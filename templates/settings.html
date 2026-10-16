@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Settings</h1>
+<p class="subtitle">System configuration and reference data &nbsp;&middot;&nbsp; <span style="color:var(--red);font-weight:600;">Admin only</span></p>
+{% if msg %}<div class="alert alert-info" style="max-width:980px;">&#10003; {{ msg }}</div>{% endif %}
+{% if err %}<div class="alert alert-warning" style="max-width:980px;">&#9888;&#65039; {{ err }}</div>{% endif %}
+
+{# ── Tabs ──────────────────────────────────────────────────────────────────
+   Plain show/hide of .stab-panel blocks, no framework. location.hash (e.g.
+   #tab=staff) picks the tab so routes below can redirect straight to a tab
+   after a POST; clicking a tab button updates the hash the same way. #}
+<div class="stab-bar" style="display:flex;gap:2px;border-bottom:2px solid var(--navy);margin-bottom:20px;max-width:980px;flex-wrap:wrap;">
+  <button type="button" class="stab-btn" data-tab="intake">Intake &amp; AI</button>
+  <button type="button" class="stab-btn" data-tab="mail">Mail</button>
+  <button type="button" class="stab-btn" data-tab="entities">Entities &amp; Properties</button>
+  <button type="button" class="stab-btn" data-tab="staff">Staff</button>
+  <button type="button" class="stab-btn" data-tab="app">App</button>
+</div>
+
+<div class="stab-panel" data-tabpanel="intake">
+<div class="card" style="max-width:700px;margin-bottom:24px;"><div class="card-header">System Configuration</div><div class="card-body">
+  <form method="POST"><div class="form-grid">
+    <div class="form-group full"><label>ScanSnap Output Folder (Scan Folder)</label>
+      <input type="text" name="scan_folder" value="{{ cfg.scan_folder }}" placeholder="Z:\UNFILED SCANS">
+      <small style="color:var(--mid);">Point your ScanSnap Home software to save PDFs here. These are tagged <strong>Physical Mail</strong>.</small></div>
+    <div class="form-group full"><label>Email Attachments Folder</label>
+      <input type="text" name="email_folder" value="{{ cfg.email_folder or '' }}" placeholder="Z:\EMAIL SCANS">
+      <small style="color:var(--mid);">Have your mail rule save email attachments (PDFs) here. The app watches it too, and tags anything from here as <strong>Email</strong>. Leave blank to disable.</small></div>
+    <div class="form-group full"><label>Filed Documents Folder</label>
+      <input type="text" name="filed_folder" value="{{ cfg.filed_folder }}" placeholder="Z:\IntakeSystem\Filed">
+      <small style="color:var(--mid);">Confirmed documents are moved here, organized by Entity &rarr; Property &rarr; Year.</small></div>
+    <div class="form-group full"><label>Claude API Key</label>
+      <input type="password" name="claude_api_key" value=""
+             placeholder="{{ 'sk-ant-… (saved — leave blank to keep)' if cfg.claude_api_key and cfg.claude_api_key != 'YOUR_API_KEY_HERE' else 'sk-ant-…' }}">
+      <small style="color:var(--mid);">Get your key at <strong>console.anthropic.com</strong>. Never shown once saved &mdash; leave blank to keep the current key, or paste a new one to replace it.</small></div>
+    <div class="form-group full"><label>Automatic filing (auto-confirm)</label>
+      <select name="auto_confirm">
+        <option value="known-vendors" {{ 'selected' if (cfg.auto_confirm or 'known-vendors') == 'known-vendors' else '' }}>Known vendors (recommended) &mdash; auto-file high-confidence bills from vendors staff confirmed before</option>
+        <option value="aggressive" {{ 'selected' if cfg.auto_confirm == 'aggressive' else '' }}>Aggressive &mdash; auto-file any fully-resolved high-confidence bill, known vendor or not</option>
+        <option value="off" {{ 'selected' if cfg.auto_confirm == 'off' else '' }}>Off &mdash; every document goes to Needs Review</option>
+      </select>
+      <small style="color:var(--mid);">Auto-filed bills are logged with processed-by <strong>Auto</strong> and appear in a spot-check feed on Needs Review. Anything with duplicate suspicion, a missing entity/property, a guessed received date, or a hint mismatch always goes to review.</small></div>
+    <div class="form-group full" style="margin-top:8px;">
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </div>
+  </div></form></div></div>
+</div>
+
+<div class="stab-panel" data-tabpanel="mail">
+<div class="card" style="max-width:980px;margin-bottom:24px;"><div class="card-header">Email Intake &mdash; Mailboxes ({{ cfg.get('mail_accounts', [])|length }})</div><div class="card-body">
+  <p style="margin-top:0;color:var(--mid);font-size:.9rem;">Every <strong>enabled</strong> mailbox below is checked for new mail every few minutes (and by <strong>Check for new items</strong>). Attachments land in the same review pipeline: bills go to Needs Review, non-bills to <strong>Filtered</strong>. Polling is read-only &mdash; mail is never marked read, moved, or deleted from any server. Duplicates across mailboxes are skipped automatically (by Message-ID).</p>
+
+  {% for a in cfg.get('mail_accounts', []) %}
+  {# `is defined` guard: the old pre-restart route renders this template without mail_status #}
+  {% set st = mail_status.get(a.name or a.username) if mail_status is defined else None %}
+  <form method="POST" action="/settings/mail/{{ a.id }}/update" style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:10px;{% if not a.enabled %}opacity:.65;{% endif %}">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-group" style="flex:1 1 150px;margin:0;"><label>Name</label>
+        <input type="text" name="name" value="{{ a.name or '' }}" placeholder="e.g. Office POP3"></div>
+      <div class="form-group" style="flex:0 0 90px;margin:0;"><label>Protocol</label>
+        <select name="protocol">
+          <option value="imap" {{ 'selected' if a.protocol != 'pop3' else '' }}>IMAP</option>
+          <option value="pop3" {{ 'selected' if a.protocol == 'pop3' else '' }}>POP3</option>
+        </select></div>
+      <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Mail server (host) *</label>
+        <input type="text" name="host" value="{{ a.host or '' }}" required></div>
+      <div class="form-group" style="flex:0 0 70px;margin:0;"><label>Port</label>
+        <input type="text" name="port" value="{{ a.port or '' }}"></div>
+      <label style="flex:0 0 auto;display:flex;align-items:center;gap:5px;padding-bottom:8px;font-size:.85rem;">
+        <input type="checkbox" name="ssl" {{ 'checked' if a.ssl else '' }}> SSL</label>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+      <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Username *</label>
+        <input type="text" name="username" value="{{ a.username or '' }}" required></div>
+      <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Password {% if a.password %}<span style="color:#2E7D32;font-weight:normal;">(saved &#10003;)</span>{% endif %}</label>
+        <input type="password" name="password" value="" placeholder="{{ 'saved — leave blank to keep' if a.password else 'no password saved!' }}" autocomplete="new-password"></div>
+      <div class="form-group" style="flex:0 0 100px;margin:0;"><label>Lookback days</label>
+        <input type="text" name="lookback_days" value="{{ a.lookback_days }}"></div>
+      <label style="flex:0 0 auto;display:flex;align-items:center;gap:5px;padding-bottom:8px;font-size:.85rem;">
+        <input type="checkbox" name="enabled" {{ 'checked' if a.enabled else '' }}> Enabled</label>
+      <button type="submit" class="btn btn-ghost btn-sm">Save</button>
+      <button type="submit" formaction="/settings/mail/{{ a.id }}/delete" class="btn btn-sm" style="background:#c00;color:#fff;"
+              formnovalidate data-mailbox-name="{{ a.name or a.username }}"
+              onclick="return confirm('Delete mailbox ' + this.dataset.mailboxName + '? The app will stop polling it. (Nothing on the mail server is touched.)')">&#128465;</button>
+    </div>
+    <div style="margin-top:6px;font-size:.83rem;">
+      {% if not a.password %}
+        <span style="color:var(--red);">&#9888;&#65039; No password saved &mdash; this mailbox is not being polled. Enter the password and Save.</span>
+      {% elif not a.enabled %}
+        <span style="color:var(--mid);">Disabled &mdash; not being polled.</span>
+      {% elif st and st.error %}
+        <span style="color:var(--red);">&#9888;&#65039; Last poll ({{ st.when }}) failed: {{ st.error }}</span>
+      {% elif st %}
+        <span style="color:#2E7D32;">&#10003; Last poll {{ st.when }} &mdash; {{ st.saved }} new attachment(s).</span>
+      {% else %}
+        <span style="color:var(--mid);">Not polled yet &mdash; next check is within 5 minutes, or click Check for new items on Needs Review.</span>
+      {% endif %}
+    </div>
+  </form>
+  {% else %}
+  <div style="color:#999;padding:8px 0 14px;">No mailboxes configured &mdash; email intake is off.</div>
+  {% endfor %}
+
+  <div style="border-top:1px solid var(--border,#ddd);padding-top:12px;margin-top:4px;">
+    <div style="font-weight:600;margin-bottom:8px;">Add a mailbox</div>
+    <form method="POST" action="/settings/mail/add">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:1 1 150px;margin:0;"><label>Name</label>
+          <input type="text" name="name" placeholder="e.g. Larry's inbox"></div>
+        <div class="form-group" style="flex:0 0 90px;margin:0;"><label>Protocol</label>
+          <select name="protocol"><option value="imap">IMAP</option><option value="pop3">POP3</option></select></div>
+        <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Mail server (host) *</label>
+          <input type="text" name="host" placeholder="e.g. secure.emailsrvr.com" required></div>
+        <div class="form-group" style="flex:0 0 70px;margin:0;"><label>Port</label>
+          <input type="text" name="port" placeholder="auto"></div>
+        <label style="flex:0 0 auto;display:flex;align-items:center;gap:5px;padding-bottom:8px;font-size:.85rem;">
+          <input type="checkbox" name="ssl" checked> SSL</label>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+        <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Username *</label>
+          <input type="text" name="username" placeholder="mailbox login / email address" required></div>
+        <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Password *</label>
+          <input type="password" name="password" autocomplete="new-password" required></div>
+        <div class="form-group" style="flex:0 0 100px;margin:0;"><label>Lookback days</label>
+          <input type="text" name="lookback_days" value="{{ mail_lookback_default }}"></div>
+        <button type="submit" class="btn btn-primary">+ Add Mailbox</button>
+      </div>
+      <small style="color:var(--mid);display:block;margin-top:6px;">Leave <strong>Port</strong> blank to use the standard one (IMAP 993/143, POP3 995/110, SSL/plain). <strong>Lookback days</strong> is how far back the poller looks for mail &mdash; keep it short for a mailbox whose history already came in through the old consolidated Gmail inbox; duplicates are skipped either way. <strong>Prefer IMAP</strong> whenever the provider offers it: with POP3 some mail servers mark everything the poller looks at as read, wiping the owner's unread/bold status (this happened to Larry's mailbox &mdash; twice).</small>
+    </form>
+  </div>
+</div></div>
+</div>
+
+<div class="stab-panel" data-tabpanel="entities">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;max-width:720px;">
+  <a href="/settings/entities" class="card" style="text-decoration:none;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>&#127970; Entities</span><span class="badge" style="background:var(--blue);border-radius:10px;padding:1px 9px;font-size:.8rem;">{{ cfg.entities|length }}</span></div>
+    <div class="card-body"><div style="color:var(--blue);font-weight:600;">Add, edit, or remove entities &rarr;</div></div>
+  </a>
+  <a href="/settings/properties" class="card" style="text-decoration:none;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>&#127968; Properties</span><span class="badge" style="background:var(--blue);border-radius:10px;padding:1px 9px;font-size:.8rem;">{{ cfg.properties|length }}</span></div>
+    <div class="card-body"><div style="color:var(--blue);font-weight:600;">Add, edit, or remove properties &rarr;</div></div>
+  </a>
+  <a href="/settings/bill_types" class="card" style="text-decoration:none;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>&#128179; Bill Types</span><span class="badge" style="background:var(--blue);border-radius:10px;padding:1px 9px;font-size:.8rem;">{{ cfg.bill_types|length }}</span></div>
+    <div class="card-body"><div style="color:var(--blue);font-weight:600;">Add, edit, or remove bill types &rarr;</div></div>
+  </a>
+  <a href="/settings/property-units" class="card" style="text-decoration:none;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>&#128209; Properties &amp; Units</span></div>
+    <div class="card-body"><div style="color:var(--blue);font-weight:600;">Review &amp; correct unit counts (drives bill splitting) &rarr;</div></div>
+  </a>
+</div>
+<div class="alert alert-info" style="max-width:720px;margin-top:16px;"><strong>Note:</strong> entity, property &amp; bill-type changes take effect immediately &mdash; no restart needed.</div>
+</div>
+
+<div class="stab-panel" data-tabpanel="staff">
+<div class="card" style="max-width:820px;margin-bottom:24px;"><div class="card-header">Staff ({{ cfg.get('staff', [])|length }})</div><div class="card-body">
+  <p style="margin-top:0;color:var(--mid);font-size:.9rem;">A new staff member can sign in right away &mdash; login always reads the current list, so no restart is needed. Passwords are never shown once saved; use <strong>Reset password</strong> to set a new one.</p>
+
+  {% for s in cfg.get('staff', []) %}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+    <div style="flex:1 1 160px;font-weight:600;">{{ s.name }}
+      {% if s.get('admin') %}<span class="badge" style="background:var(--orange);color:#fff;border-radius:10px;padding:1px 9px;font-size:.75rem;margin-left:6px;">admin</span>{% endif %}
+    </div>
+
+    <form method="POST" action="/settings/staff/password" style="display:flex;gap:6px;align-items:center;margin:0;flex:2 1 260px;">
+      <input type="hidden" name="name" value="{{ s.name }}">
+      <input type="password" name="password" placeholder="New password (4+ chars)" autocomplete="new-password" style="flex:1;min-width:150px;">
+      <button type="submit" class="btn btn-ghost btn-sm">Reset password</button>
+    </form>
+
+    <form method="POST" action="/settings/staff/toggle_admin" style="margin:0;">
+      <input type="hidden" name="name" value="{{ s.name }}">
+      <button type="submit" class="btn btn-ghost btn-sm">{{ 'Remove admin' if s.get('admin') else 'Make admin' }}</button>
+    </form>
+
+    <form method="POST" action="/settings/staff/remove" style="margin:0;">
+      <input type="hidden" name="name" value="{{ s.name }}">
+      <button type="submit" class="btn btn-sm" style="background:#c00;color:#fff;"
+              data-staff-name="{{ s.name }}"
+              onclick="return confirm('Remove staff member ' + this.dataset.staffName + '? They will no longer be able to sign in.')">&#128465;</button>
+    </form>
+  </div>
+  {% else %}
+  <div style="color:#999;padding:8px 0 14px;">No staff configured.</div>
+  {% endfor %}
+
+  <div style="border-top:1px solid var(--border,#ddd);padding-top:12px;margin-top:4px;">
+    <div style="font-weight:600;margin-bottom:8px;">Add staff member</div>
+    <form method="POST" action="/settings/staff/add">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Name *</label>
+          <input type="text" name="name" required></div>
+        <div class="form-group" style="flex:1 1 180px;margin:0;"><label>Password *</label>
+          <input type="password" name="password" autocomplete="new-password" required></div>
+        <label style="flex:0 0 auto;display:flex;align-items:center;gap:5px;padding-bottom:8px;font-size:.85rem;">
+          <input type="checkbox" name="admin"> Admin</label>
+        <button type="submit" class="btn btn-primary">+ Add Staff Member</button>
+      </div>
+      <small style="color:var(--mid);display:block;margin-top:6px;">Passwords need at least 4 characters.</small>
+    </form>
+  </div>
+</div></div>
+</div>
+
+<div class="stab-panel" data-tabpanel="app">
+<div class="card" style="max-width:700px;margin-bottom:24px;"><div class="card-header">App</div><div class="card-body">
+  <p style="margin-top:0;color:var(--mid);font-size:.9rem;">Restart to pick up a code update. Settings and reference-data changes (folders, mail, entities, properties, bill types, staff) all take effect immediately and never need this.</p>
+  <div style="display:flex;gap:12px;align-items:center;">
+    <button type="button" class="btn btn-orange" id="restart-btn" onclick="restartApp()">&#8635; Restart App</button>
+    <span id="restart-msg" style="font-size:.85rem;color:var(--mid);display:none;">Restarting&hellip; page will reload in a few seconds.</span>
+  </div>
+  <p style="margin:12px 0 0;font-size:.85rem;color:var(--mid);">
+    Running code <code style="background:var(--pale);color:var(--navy);padding:1px 6px;border-radius:4px;">{{ running_code }}</code>
+    since {{ app_started }}
+    {% if disk_code != running_code %}
+    &mdash; <strong style="color:#B45309;">&#9888; code <code>{{ disk_code }}</code> is on disk; restart to pick it up</strong>
+    {% else %}
+    &mdash; up to date with the latest commit on disk.
+    {% endif %}
+  </p>
+</div></div>
+
+<div class="card" style="max-width:700px;margin-bottom:24px;"><div class="card-header">Fill blanks on harvested records</div><div class="card-body">
+  <p style="margin-top:0;color:var(--mid);font-size:.9rem;">Records imported from the manual filing cabinet often have blank amounts or dates. This re-reads each document and fills <strong>only</strong> the blank fields &mdash; existing values are never touched, and nothing on disk is moved or renamed. Costs about one cent per record.</p>
+  <form method="POST" action="/settings/ai_fill_harvest"
+        onsubmit="return confirm('Fill blank details on every harvested record with a blank field? This reads each document with the AI in the background (about one cent per record) and never overwrites an existing value.');">
+    <button type="submit" class="btn btn-primary">Fill Blanks on Harvested Records</button>
+  </form>
+</div></div>
+
+<div class="card" style="max-width:700px;"><div class="card-header">Retro-attach source emails</div><div class="card-body">
+  <p style="margin-top:0;color:var(--mid);font-size:.9rem;">Documents ingested before July&nbsp;7 never had their source email stored, so their record pages can&rsquo;t show or print the email. This re-reads the office mailboxes and matches emails to those documents by <strong>exact file content</strong> &mdash; never guesswork. Mailboxes are only ever read: nothing is marked as read, moved, or deleted (IMAP peek / POP3 TOP only). Results land in <a href="/ops-reports">Ops Reports</a> as &ldquo;Email backfill&rdquo;.</p>
+  {% if backfill_running %}
+  <button type="button" class="btn btn-primary" disabled>Running&hellip; see Ops Reports when done</button>
+  {% else %}
+  <form method="POST" action="/settings/email_backfill"
+        onsubmit="return confirm('Re-read the office mailboxes and attach matching emails to email-less documents? Mailboxes are read-only (nothing gets marked read); only exact-content matches are attached.');">
+    <button type="submit" class="btn btn-primary">Retro-attach Source Emails</button>
+  </form>
+  {% endif %}
+</div></div>
+</div>
+
+<style>
+  .stab-btn{background:transparent;border:none;border-bottom:3px solid transparent;padding:10px 18px;
+    font-size:.9rem;font-weight:600;color:var(--mid);cursor:pointer;margin-bottom:-2px;}
+  .stab-btn:hover{color:var(--navy);}
+  .stab-btn.active{color:var(--navy);border-bottom-color:var(--blue);}
+  .stab-panel{display:none;}
+  .stab-panel.active{display:block;}
+</style>
+
+<script>
+// ── Tabs: show/hide + hash deep-linking ──────────────────────────────────────
+var STAB_NAMES = ['intake', 'mail', 'entities', 'staff', 'app'];
+function stabFromHash(){
+  var m = (location.hash || '').match(/tab=([a-z]+)/);
+  return (m && STAB_NAMES.indexOf(m[1]) >= 0) ? m[1] : STAB_NAMES[0];
+}
+function stabShow(name){
+  document.querySelectorAll('.stab-panel').forEach(function(p){
+    p.classList.toggle('active', p.dataset.tabpanel === name);
+  });
+  document.querySelectorAll('.stab-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+}
+document.querySelectorAll('.stab-btn').forEach(function(b){
+  b.addEventListener('click', function(){ location.hash = 'tab=' + b.dataset.tab; });
+});
+window.addEventListener('hashchange', function(){ stabShow(stabFromHash()); });
+stabShow(stabFromHash());
+
+function restartApp(){
+  if(!confirm('Restart the server now? The page will reload automatically.')) return;
+  document.getElementById('restart-btn').disabled=true;
+  document.getElementById('restart-msg').style.display='';
+  fetch('/api/restart',{method:'POST'}).then(()=>{
+    setTimeout(()=>location.reload(), 3000);
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,75 @@
+{# Side-by-side comparison of two documents' important characteristics.
+   Solid green square = same. Solid red square = meaningfully different
+   (strong/medium signal — argues this is a different bill). Dashed grey =
+   different but NORMAL for a second copy of the same bill (received date,
+   source, the file bytes...) — counts zero against a match. Plain grey =
+   only one side has a value. `cmp` comes from app._dup_comparison(). #}
+
+{% macro source_badge(doc) -%}
+  {#- Loud, color-coded origin tag for a document image: email vs scanned
+      paper. Karen: "I need it very clear if the image of the document is
+      scanned or from email." Blue = email, orange = paper scan. -#}
+  {%- if (doc.mail_type or 'Physical Mail') == 'Email' -%}
+    <span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#E3F2FD;border:2px solid #1565C0;color:#0D47A1;font-weight:800;font-size:.78rem;letter-spacing:.4px;"
+          title="This copy arrived by email{% if doc.email_from %} — from {{ doc.email_from }}{% endif %}{% if doc.email_subject %} ({{ doc.email_subject }}){% endif %}">&#128231; FROM EMAIL</span>
+  {%- else -%}
+    <span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#FFF3E0;border:2px solid #E65100;color:#B45309;font-weight:800;font-size:.78rem;letter-spacing:.4px;"
+          title="This copy is a scan of paper mail{% if doc.batch_number %} — scanning batch {{ doc.batch_number }}{% endif %}">&#128424;&#65039; SCANNED PAPER</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro verdict_badge(cmp) -%}
+  {%- set vb = {'certain':     ('#E8F5E9','#2E7D32','#1B5E20'),
+                'very_likely': ('#E8F5E9','#2E7D32','#1B5E20'),
+                'likely':      ('#FFF3E0','#E65100','#B45309'),
+                'possible':    ('#FFF3E0','#E65100','#B45309'),
+                'weak':        ('#F0F0F0','#9E9E9E','#555555')}[cmp.verdict.level] -%}
+  <span style="display:inline-block;padding:2px 10px;border-radius:12px;background:{{ vb[0] }};border:2px solid {{ vb[1] }};color:{{ vb[2] }};font-weight:700;">{{ cmp.verdict.label }}</span>
+{%- endmacro %}
+
+{% macro dup_summary(cmp) -%}
+  {{ verdict_badge(cmp) }} &middot; {{ cmp.same }} of {{ cmp.compared }} detail{{ 's' if cmp.compared != 1 else '' }} match{% if cmp.diff_labels %} &middot; meaningful difference{{ 's' if cmp.diff_labels|length != 1 else '' }}: {{ cmp.diff_labels|join(', ') }}{% endif %}
+{%- endmacro %}
+
+{% macro _chip(value, state, signal) -%}
+  {%- if state == 'same' -%}
+    <span style="display:inline-block;padding:2px 9px;border-radius:5px;background:#E8F5E9;border:2px solid #2E7D32;color:#1B5E20;font-weight:600;">{{ value or '&mdash;'|safe }}</span>
+  {%- elif state == 'diff' and signal in ('strong', 'medium') -%}
+    <span style="display:inline-block;padding:2px 9px;border-radius:5px;background:#FDE8E8;border:2px solid #C62828;color:#B71C1C;font-weight:600;">{{ value or '&mdash;'|safe }}</span>
+  {%- elif state == 'diff' -%}
+    <span style="display:inline-block;padding:2px 9px;border-radius:5px;background:#F5F5F5;border:2px dashed #9E9E9E;color:#555;"
+          title="Different, but that's normal for a second copy of the same bill — it doesn't count against a match.">{{ value or '&mdash;'|safe }}</span>
+  {%- else -%}
+    <span style="color:var(--mid);">{{ value or '&mdash;'|safe }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro dup_compare(cmp, left_title, right_title, compare_url=None) %}
+{% if cmp.verdict.reason %}
+<p style="font-size:.85rem;color:var(--mid);margin:4px 0 8px;">{{ cmp.verdict.reason }}</p>
+{% endif %}
+{% if compare_url %}
+<a href="{{ compare_url }}" class="btn btn-ghost btn-sm" style="margin-bottom:8px;">&#128269; View both documents side by side (boxed)</a>
+{% endif %}
+<div class="table-wrap"><table style="font-size:.87rem;">
+  <thead><tr><th style="width:130px;"></th><th>{{ left_title }}</th><th>{{ right_title }}</th></tr></thead>
+  <tbody>
+  {% for r in cmp.rows %}
+  <tr>
+    <th style="text-align:right;color:var(--mid);font-weight:600;white-space:nowrap;">{{ r.label }}
+      {% if r.signal == 'strong' %}<div style="font-size:.66rem;font-weight:700;color:#B45309;">strong signal</div>{% endif %}</th>
+    <td>{{ _chip(r.left, r.state, r.signal) }}
+      {% if r.left_path %}<div style="font-size:.72rem;color:var(--mid);font-family:Consolas,monospace;word-break:break-all;">{{ r.left_path|unc }}</div>{% endif %}</td>
+    <td>{{ _chip(r.right, r.state, r.signal) }}
+      {% if r.right_path %}<div style="font-size:.72rem;color:var(--mid);font-family:Consolas,monospace;word-break:break-all;">{{ r.right_path|unc }}</div>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<div style="font-size:.8rem;color:var(--mid);margin-top:6px;">
+  <span style="display:inline-block;width:12px;height:12px;background:#E8F5E9;border:2px solid #2E7D32;border-radius:3px;vertical-align:-2px;"></span> same &nbsp;&nbsp;
+  <span style="display:inline-block;width:12px;height:12px;background:#FDE8E8;border:2px solid #C62828;border-radius:3px;vertical-align:-2px;"></span> meaningfully different &nbsp;&nbsp;
+  <span style="display:inline-block;width:12px;height:12px;background:#F5F5F5;border:2px dashed #9E9E9E;border-radius:3px;vertical-align:-2px;"></span> differs, but normal for a second copy &nbsp;&nbsp;
+  plain grey = only one of the two has it
+</div>
+{% endmacro %}

@@ -1,0 +1,218 @@
+{# Folder picker (reports #25/#34/#37/#44): drop a file-server folder into a
+   form input. Include once per page, call openFolderPicker('input-id') from a
+   Browse button.
+
+   NATIVE FIRST (report #34, Joshua 2026-08-05): when this desk's scan
+   connector is running, Browse pops the REAL Windows folder chooser via the
+   connector command channel (desk_commands.py) — the exact dialog every
+   upload button opens, in folder mode. The in-app modal below is the
+   fallback (no connector / error), restyled to look and feel like that
+   dialog: toolbar, address bar, white list, single-click selects /
+   double-click opens, Select Folder + Cancel in the footer.
+
+   Paths shown and inserted are full UNC (house rule, #33/#36); the server
+   resolves them back regardless of desk. #}
+
+{# ── Waiting overlay while the native dialog is open on this computer ── #}
+<div id="fpn-overlay" style="display:none;position:fixed;inset:0;background:rgba(20,30,50,.45);z-index:1000;">
+  <div style="max-width:420px;margin:18vh auto 0;background:var(--card,#fff);border-radius:10px;
+              box-shadow:0 12px 40px rgba(0,0,0,.25);padding:22px 26px;text-align:center;">
+    <div style="font-size:2rem;">&#128193;</div>
+    <div style="font-weight:700;margin:6px 0 4px;">Choose the folder in the Windows dialog</div>
+    <div style="font-size:.85rem;color:var(--mid,#667);">A folder chooser just opened on this computer.
+      If you don't see it, check the taskbar.</div>
+    <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fpnAbort(true)">Use the in-app browser instead</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fpnAbort(false)">Never mind</button>
+    </div>
+  </div>
+</div>
+
+{# ── Fallback modal, styled after the native dialog ── #}
+<div id="fp-overlay" style="display:none;position:fixed;inset:0;background:rgba(20,30,50,.45);z-index:1000;"
+     onclick="if(event.target===this)fpClose()">
+  <div style="max-width:680px;margin:6vh auto 0;background:#f7f8fa;border:1px solid #c9ced6;border-radius:8px;
+              box-shadow:0 12px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:82vh;overflow:hidden;">
+    {# title bar #}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fff;border-bottom:1px solid #e3e6ec;">
+      <div style="font-size:.85rem;font-weight:600;">&#128193; Select Folder</div>
+      <span onclick="fpClose()" style="cursor:pointer;font-size:1.1rem;line-height:1;padding:0 4px;" title="Close">&times;</span>
+    </div>
+    {# toolbar: back / up / address bar / search #}
+    <div style="display:flex;gap:6px;align-items:center;padding:8px 10px;background:#fff;border-bottom:1px solid #e3e6ec;">
+      <button type="button" class="btn btn-ghost btn-sm" id="fp-back" onclick="fpBack()" disabled
+              title="Back" style="padding:2px 9px;">&#8592;</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="fp-up" onclick="fpUp()" disabled
+              title="Up one level" style="padding:2px 9px;">&#8593;</button>
+      <div id="fp-crumbs" style="flex:1;border:1px solid #d5dae2;border-radius:4px;background:#fff;
+           padding:4px 8px;font-size:.8rem;white-space:nowrap;overflow-x:auto;line-height:1.7;"></div>
+      <input type="text" id="fp-search" placeholder="Search folders&hellip;"
+             style="width:170px;box-sizing:border-box;padding:5px 8px;font-size:.82rem;border:1px solid #d5dae2;border-radius:4px;"
+             oninput="fpSearchInput()" autocomplete="off">
+    </div>
+    {# the list #}
+    <div id="fp-list" style="flex:1;overflow-y:auto;background:#fff;margin:8px 10px;border:1px solid #d5dae2;
+         border-radius:4px;min-height:240px;padding:4px;"></div>
+    {# footer, like the native dialog's bottom bar #}
+    <div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #e3e6ec;">
+      <span style="font-size:.82rem;color:var(--mid,#667);flex-shrink:0;">Folder:</span>
+      <span id="fp-current" style="flex:1;font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+            title=""></span>
+      <button type="button" class="btn btn-primary btn-sm" id="fp-choose" onclick="fpChoose()" disabled
+              style="white-space:nowrap;flex-shrink:0;">Select Folder</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fpClose()"
+              style="white-space:nowrap;flex-shrink:0;">Cancel</button>
+    </div>
+  </div>
+</div>
+<script>
+var _fp = {target:null, path:null, unc:null, timer:null, history:[],
+           parent:null, sel:null, selUnc:null, native:null, poll:null, cmd:null};
+
+function openFolderPicker(inputId){
+  _fp.target = document.getElementById(inputId);
+  var seed = (_fp.target && _fp.target.value || '').trim();
+  // Native first (report #34): if this desk's connector can pop the real
+  // Windows dialog, use it; the modal only appears as the fallback.
+  fpDeskStatus(function(native){
+    if(native){ fpNativeStart(seed); } else { fpModalOpen(seed); }
+  });
+}
+
+function fpDeskStatus(cb){
+  if(_fp.native !== null){ return cb(_fp.native); }
+  fetch('/api/desk/status').then(function(r){ return r.json(); })
+    .then(function(d){ _fp.native = !!(d && d.commands); cb(_fp.native); })
+    .catch(function(){ _fp.native = false; cb(false); });
+}
+
+// ── Native flow: ask the desk's connector for the real dialog ──
+function fpNativeStart(seed){
+  fetch('/api/desk/pick_folder', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({initial: seed})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.cmd_id){ return fpModalOpen(seed); }
+      _fp.cmd = d.cmd_id;
+      document.getElementById('fpn-overlay').style.display = '';
+      var tries = 0;
+      _fp.poll = setInterval(function(){
+        tries++;
+        if(tries > 240){ return fpnAbort(true); }   // 4 min: give up to the modal
+        fetch('/api/desk/pick_folder/' + _fp.cmd)
+          .then(function(r){ return r.json(); })
+          .then(function(res){
+            if(res.status === 'done'){
+              fpnStop();
+              if(_fp.target && res.path){ _fp.target.value = res.path;
+                _fp.target.dispatchEvent(new Event('change')); }
+            } else if(res.status === 'cancelled'){
+              fpnStop();                            // the user said no — respect it
+            } else if(res.status === 'error'){
+              fpnAbort(true);
+            }                                       // waiting/pending: keep polling
+          }).catch(function(){});
+      }, 1000);
+    })
+    .catch(function(){ fpModalOpen(seed); });
+}
+function fpnStop(){
+  clearInterval(_fp.poll); _fp.poll = null; _fp.cmd = null;
+  document.getElementById('fpn-overlay').style.display = 'none';
+}
+function fpnAbort(fallback){
+  var seed = (_fp.target && _fp.target.value || '').trim();
+  fpnStop();
+  if(fallback){ fpModalOpen(seed); }
+}
+
+// ── Fallback modal (Explorer-styled) ──
+function fpModalOpen(seed){
+  document.getElementById('fp-overlay').style.display = '';
+  document.getElementById('fp-search').value = '';
+  _fp.history = [];
+  fpBrowse(seed || null, true);
+}
+function fpClose(){ document.getElementById('fp-overlay').style.display = 'none'; }
+function fpChoose(){
+  var unc = _fp.selUnc || _fp.unc;   // a selected subfolder wins, like Explorer
+  if(_fp.target && unc){ _fp.target.value = unc;
+    _fp.target.dispatchEvent(new Event('change')); }
+  fpClose();
+}
+function fpBack(){
+  if(_fp.history.length < 2) return;
+  _fp.history.pop();                                // current
+  fpBrowse(_fp.history.pop(), false);
+}
+function fpUp(){ if(_fp.parent !== undefined && _fp.parent !== null) fpBrowse(_fp.parent || null, false); }
+function fpSelect(el, path, unc){
+  var rows = document.querySelectorAll('#fp-list .fp-row');
+  for(var i=0;i<rows.length;i++){ rows[i].style.background=''; rows[i].style.outline=''; }
+  el.style.background = 'var(--pale,#e8f0fe)';
+  el.style.outline = '1px solid var(--light-blue,#BDD7EE)';
+  _fp.sel = path; _fp.selUnc = unc;
+  fpFooter(unc);
+}
+function fpFooter(unc){
+  var cur = document.getElementById('fp-current');
+  var name = (unc || '').split('\\').filter(Boolean).pop() || 'File server';
+  cur.textContent = name; cur.title = unc || '';
+  document.getElementById('fp-choose').disabled = !unc;
+}
+function fpBrowse(path, resetHist){
+  var url = '/api/folders' + (path ? ('?path=' + encodeURIComponent(path)) : '');
+  fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    if(d.error){ if(path) return fpBrowse(null, resetHist);
+      return fpMsg(d.error); }
+    _fp.path = d.path || null; _fp.unc = d.unc || null;
+    _fp.sel = null; _fp.selUnc = null;
+    if(resetHist){ _fp.history = []; }
+    if(_fp.history[_fp.history.length-1] !== _fp.path){ _fp.history.push(_fp.path); }
+    document.getElementById('fp-back').disabled = _fp.history.length < 2;
+    var crumbs = (d.crumbs || []);
+    _fp.parent = crumbs.length ? crumbs[crumbs.length-1].path : (d.path ? null : undefined);
+    document.getElementById('fp-up').disabled = !d.path;
+    fpFooter(d.unc);
+    var chips = crumbs.map(function(c){
+      return '<a href="#" style="text-decoration:none;" onclick="fpBrowse(' + fpQ(c.path) + ');return false;">' + fpEsc(c.name) + '</a>';
+    });
+    chips.unshift('<a href="#" style="text-decoration:none;" onclick="fpBrowse(null);return false;">&#128421; File server</a>');
+    if(d.path){ chips.push('<strong>' + fpEsc((d.unc||'').split('\\').filter(Boolean).pop() || '') + '</strong>'); }
+    document.getElementById('fp-crumbs').innerHTML = chips.join(' <span style="color:#bbb;">&rsaquo;</span> ');
+    var rows = (d.dirs || []).map(function(f){
+      var unc = (_fp.unc || '') + '\\' + f.name;
+      return '<div class="fp-row" style="padding:5px 10px;border-radius:4px;cursor:default;font-size:.88rem;user-select:none;" ' +
+             'onclick="fpSelect(this, ' + fpQ(f.path) + ', ' + fpQ(unc) + ')" ' +
+             'ondblclick="fpBrowse(' + fpQ(f.path) + ', false)">&#128193; ' + fpEsc(f.name) + '</div>';
+    });
+    document.getElementById('fp-list').innerHTML =
+      rows.join('') || '<div style="padding:14px;color:var(--mid,#667);font-size:.85rem;">This folder has no subfolders. Click <strong>Select Folder</strong> to use it.</div>';
+  }).catch(function(){ fpMsg('Could not reach the server.'); });
+}
+function fpSearchInput(){
+  clearTimeout(_fp.timer);
+  var q = document.getElementById('fp-search').value.trim();
+  if(q.length < 2){ return; }
+  _fp.timer = setTimeout(function(){
+    fetch('/api/folders/search?q=' + encodeURIComponent(q))
+      .then(function(r){ return r.json(); }).then(function(d){
+        if(d.building){ return fpMsg('Building the folder index &mdash; try again in a moment&hellip;'); }
+        var rows = (d.results || []).map(function(f){
+          return '<div class="fp-row" style="padding:5px 10px;border-radius:4px;cursor:default;user-select:none;" ' +
+                 'onclick="fpSelect(this, ' + fpQ(f.path) + ', ' + fpQ(f.unc) + ')" ' +
+                 'ondblclick="document.getElementById(\'fp-search\').value=\'\';fpBrowse(' + fpQ(f.path) + ', false)">' +
+                 '<div style="font-size:.88rem;">&#128193; ' + fpEsc(f.name) + '</div>' +
+                 '<div style="font-family:Consolas,monospace;font-size:.68rem;color:var(--mid,#667);word-break:break-all;">' + fpEsc(f.unc) + '</div></div>';
+        });
+        document.getElementById('fp-list').innerHTML =
+          rows.join('') || '<div style="padding:14px;color:var(--mid,#667);font-size:.85rem;">No folders match.</div>';
+      });
+  }, 300);
+}
+function fpMsg(html){ document.getElementById('fp-list').innerHTML =
+  '<div style="padding:14px;color:var(--mid,#667);font-size:.85rem;">' + html + '</div>'; }
+function fpEsc(s){ var d = document.createElement('span'); d.textContent = s || ''; return d.innerHTML; }
+function fpQ(s){ return JSON.stringify(s).replace(/"/g, '&quot;'); }
+</script>

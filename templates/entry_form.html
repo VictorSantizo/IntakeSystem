@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+{% from "_date_guard.html" import date_guard_box, date_guard_script %}
+{% block content %}
+{# `f` is whatever this form knows about the record: the row being edited, or
+   (report #50) the draft the classifier read off a document that was just
+   pulled in. Everything below reads values from `f`; `entry` still means
+   "this is an existing record" and gates the things only a saved record has
+   — its id, its document pane, Mark as Paid, Delete. #}
+{% set f = entry or draft %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1>{{ 'Edit Entry #' ~ entry.id if entry else 'New Manual Entry' }}</h1>
+    <p class="subtitle">{{ 'Update an existing log entry' if entry else 'Manually log a piece of mail or an email' }}</p>
+  </div>
+  {% if entry and entry.status != 'Paid' %}
+  <button type="button" class="btn btn-primary" style="background:#1565C0;" data-kk="mark-paid" onclick="document.getElementById('pay-modal').style.display='flex'">&#10003; Mark as Paid</button>
+  {% endif %}
+</div>
+
+{% if not entry %}
+{# ── Report #50: start from a document ─────────────────────────────────────
+   "This screen should have an option to pull in a scanned file and choose
+   whether to move it to a new location or leave it where it is. If it's on
+   the user's local drive, then it should be copied into the correct location.
+   Also, this option should be at the top and OCR completed after and the form
+   filled with that info." — so it sits above the fields, and reading the
+   document is what fills them in. #}
+{% if doc_error %}
+<div class="alert" style="background:#FDE8E8;color:var(--red);border-left:4px solid var(--red);margin:14px 0;padding:10px 14px;">
+  &#9888;&#65039; {{ doc_error }}
+</div>
+{% endif %}
+{% if source %}
+<div class="card" style="margin-bottom:18px;border-left:4px solid var(--green,#2E7D32);">
+  <div class="card-header">&#128196; Document pulled in</div>
+  <div class="card-body">
+    <div style="font-weight:600;">{{ source.name }}</div>
+    <div style="font-family:Consolas,monospace;font-size:.72rem;color:var(--mid);word-break:break-all;margin:2px 0 10px;">{{ source.unc }}</div>
+    {% if source.note %}
+    <div style="font-size:.83rem;background:#FFF6E5;border-left:3px solid var(--orange,#E8820C);padding:7px 10px;border-radius:4px;margin-bottom:10px;">
+      &#128197; {{ source.note }}
+    </div>
+    {% endif %}
+    {% if source.duplicates %}
+    <div style="font-size:.83rem;background:#FDE8E8;border-left:3px solid var(--red);padding:7px 10px;border-radius:4px;margin-bottom:10px;">
+      &#9888;&#65039; This exact file is already logged as
+      {% for d in source.duplicates %}<a href="/entry/{{ d.id }}/view">{{ d.record_no or '#' ~ d.id }}</a>{{ ' — ' ~ d.vendor if d.vendor else '' }}{{ ', ' if not loop.last }}{% endfor %}.
+      Check before logging it again.
+    </div>
+    {% endif %}
+    {% if source.staged %}
+    <div style="font-size:.85rem;color:var(--mid);">
+      Copied from your computer onto the file server. It will be filed into the
+      cabinet under the archive's naming convention when you press <strong>Log Entry</strong>.
+    </div>
+    {% else %}
+    <div style="font-size:.85rem;">
+      <label style="display:flex;align-items:center;gap:7px;font-weight:normal;cursor:pointer;">
+        <input type="radio" name="placement" value="leave" form="entry-form" onchange="docPlacement()"
+               {{ 'checked' if source.placement != 'cabinet' else '' }}>
+        <span>Leave it exactly where it is &mdash; same folder, same name, untouched</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;font-weight:normal;cursor:pointer;margin-top:4px;">
+        <input type="radio" name="placement" value="cabinet" form="entry-form" onchange="docPlacement()"
+               {{ 'checked' if source.placement == 'cabinet' else '' }}>
+        <span>Move it &mdash; file it into the cabinet, renamed to the archive's convention</span>
+      </label>
+    </div>
+    {% endif %}
+    <div id="doc-dest" style="margin-top:8px;{{ '' if source.placement == 'cabinet' else 'display:none;' }}">
+      <label style="font-size:.8rem;font-weight:600;">Into which folder? <span style="font-weight:normal;color:var(--mid);">&mdash; leave blank and the app picks it from the entity, property and year</span></label>
+      <div style="display:flex;gap:6px;">
+        <input type="text" name="filed_dir" id="doc-filed-dir" form="entry-form"
+               value="{{ source.filed_dir or '' }}" placeholder="\\LACKSSERVER2021\File-Cabinet\..."
+               style="flex:1;font-size:.8rem;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openFolderPicker('doc-filed-dir')" style="white-space:nowrap;">Browse&hellip;</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "_folder_picker.html" %}
+<script>
+function docPlacement(){
+  var chosen = document.querySelector('input[name="placement"]:checked');
+  document.getElementById('doc-dest').style.display =
+    (chosen && chosen.value === 'cabinet') ? '' : 'none';
+}
+</script>
+{% else %}
+<div class="card" style="margin-bottom:18px;">
+  <div class="card-header">&#128206; Start from a document <span style="font-weight:normal;font-size:.8rem;opacity:.85;">&mdash; optional; we'll read it and fill in what we can</span></div>
+  <div class="card-body">
+    <form method="POST" action="/entry/new/from-document" enctype="multipart/form-data"
+          onsubmit="document.getElementById('doc-go').disabled=true;document.getElementById('doc-go').textContent='Reading the document…';">
+      <div style="display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;">
+        <div style="flex:1 1 300px;">
+          <label style="font-size:.85rem;font-weight:600;">A file on this computer</label>
+          <input type="file" name="upload" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.docx" style="font-size:.85rem;width:100%;">
+          <small style="color:var(--mid);display:block;margin-top:3px;">Copied onto the file server first &mdash; a path on your own drive means nothing to the server.</small>
+        </div>
+        <div style="flex:1 1 300px;">
+          <label style="font-size:.85rem;font-weight:600;">&hellip;or a document already on the file server</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" name="source_path" id="src-path" placeholder="\\LACKSSERVER2021\File-Cabinet\..." style="flex:1;font-size:.8rem;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="openFilePicker('src-path')" style="white-space:nowrap;">Browse&hellip;</button>
+          </div>
+          <small style="color:var(--mid);display:block;margin-top:3px;">You choose whether it stays put or gets filed, after we've read it.</small>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" id="doc-go" style="margin-top:12px;">&#128269; Read this document</button>
+    </form>
+  </div>
+</div>
+{% include "_file_picker.html" %}
+{% endif %}
+{% endif %}
+
+<div style="display:grid;grid-template-columns:{% if entry and (entry.filed_path or entry.pdf_path) %}1fr 1fr{% else %}1fr{% endif %};gap:24px;align-items:start;">
+
+{% if entry and (entry.filed_path or entry.pdf_path) %}
+<div style="position:sticky;top:16px;">
+  <div class="card">
+    <div class="card-header">&#128196; Document</div>
+    <div class="card-body" style="padding:0;height:80vh;">
+      <iframe src="/entry/{{ entry.id }}/pdf" style="width:100%;height:100%;border:none;border-radius:0 0 8px 8px;"></iframe>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card"><div class="card-header">{{ 'Edit Entry' if entry else 'Entry Details' }}</div><div class="card-body">
+  <form method="POST" id="entry-form" {% if entry %}action="/entry/{{ entry.id }}/edit{{ nav_qs or '' }}"{% endif %}><div class="form-grid">
+    {% if source %}{# #50: which document this entry came from, carried to the save.
+       Re-validated server-side on every POST — the field is a convenience, not
+       a permission. #}
+    <input type="hidden" name="source_path" value="{{ source.path }}">
+    {% if source.staged %}<input type="hidden" name="placement" value="cabinet">{% endif %}
+    {% endif %}
+    {# Every free-text value needs `or ''`: Jinja prints a NULL field as the text
+       "None", and saving the form then writes that string into intake_log
+       (2026-07-22 damage, records 780/791/796). #}
+    <div class="form-group"><label>Date Received *</label><input type="date" name="date_received" id="received_date" value="{{ (f.date_received if f else today) or today }}" required></div>
+    <div class="form-group"><label>Mail Type</label><select name="mail_type">{% set cur=f.mail_type if f else 'Physical Mail' %}{% for mt in ['Physical Mail','Email','Fax','Courier'] %}<option value="{{ mt }}" {{ 'selected' if cur==mt else '' }}>{{ mt }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Document Type *</label><select name="doc_type"><option value="">— Select —</option>{% set cur_dt=(f.doc_type if f else '') or '' %}{% for dt in doc_type_choices(cur_dt) %}<option value="{{ dt }}" {{ 'selected' if cur_dt==dt else '' }}>{{ dt }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Bill Type Code</label><select name="bill_type_code"><option value="">— Select —</option>{% for bt in cfg.bill_types %}<option value="{{ bt.code }}" {{ 'selected' if f and f.bill_type_code==bt.code else '' }}>{{ bt.code }} &ndash; {{ bt.description }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Entity</label><select name="entity_code"><option value="">— Select Entity —</option>{% for e in cfg.entities %}<option value="{{ e.code }}" {{ 'selected' if f and f.entity_code==e.code else '' }}>{{ e.code }} &ndash; {{ e.name }}</option>{% endfor %}</select></div>
+    {% set selected_codes = (f.property_code or '').replace(' ', '').split(',') if f else [] %}
+    <div class="form-group full"><label>Properties (select all that apply)</label>
+      <input type="text" id="prop-search" placeholder="Filter properties…" oninput="filterProps(this.value)" style="margin-bottom:6px;">
+      <div id="prop-list" style="max-height:160px;overflow-y:auto;border:1px solid #ccc;border-radius:6px;padding:8px;background:#fff;display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+      {% for p in cfg.properties %}
+        <label style="display:flex;align-items:center;gap:6px;font-size:.83rem;font-weight:normal;cursor:pointer;padding:2px 4px;border-radius:4px;" class="prop-item">
+          <input type="checkbox" name="property_codes" value="{{ p.code }}"
+            {{ 'checked' if p.code in selected_codes else '' }}
+            onchange="sortProps()">
+          <span><code>{{ p.code }}</code> {{ p.address[:40] }}</span>
+        </label>
+      {% endfor %}
+      </div>
+    </div>
+    {# Report #20 — a real home for the unit number. Nancy had been typing it into
+       Account #, which means the vendor's ongoing account number, so a bill ended up
+       looking like it had an account it didn't. Every property's units are rendered
+       here and shown/hidden as properties are ticked, so picking a unit costs no
+       round-trip; the server drops any that belong to an unticked property. #}
+    <div class="form-group full" id="unit-block" style="display:none;">
+      <label>Unit <span style="font-weight:normal;color:var(--mid);font-size:.8rem;">&mdash; which unit is this about? (optional, pick as many as apply)</span></label>
+      <div id="unit-list" style="max-height:130px;overflow-y:auto;border:1px solid #ccc;border-radius:6px;padding:8px;background:#fff;display:flex;flex-wrap:wrap;gap:4px;">
+      {% for pcode, units in (units_by_property or {}).items() %}
+        {% for u in units %}
+        {# Full PROPCODE-UNIT, never the bare number (report #78.1, Joshua: "The unit
+           codes should be PROP-CODE + Unit # otherwise, I'm not sure what to pick
+           here"). A bill can name several properties, and T27's "5" next to PP16's
+           "5" is unreadable — the code is how the archive has always written it. #}
+        <label class="unit-item" data-prop="{{ pcode }}" style="display:none;align-items:center;gap:4px;font-size:.83rem;font-weight:normal;cursor:pointer;padding:2px 7px;border:1px solid #d5d5e0;border-radius:6px;background:var(--pale);">
+          <input type="checkbox" name="unit_ids" value="{{ u.id }}"
+                 {{ 'checked' if u.id in (selected_unit_ids or []) else '' }}>
+          <span><code style="font-size:.8rem;">{{ u.unit_code }}</code></span>
+        </label>
+        {% endfor %}
+      {% endfor %}
+      </div>
+      <div id="unit-empty" style="display:none;font-size:.8rem;color:var(--mid);padding:4px 2px;">
+        No units on file for the selected propert{{ 'ies' }} &mdash; add them under
+        <a href="/settings/property-units">Properties &amp; Units</a>.
+      </div>
+    </div>
+    <div class="form-group"><label>Vendor / Sender</label><input type="text" name="vendor" value="{{ (f.vendor if f else '') or '' }}" placeholder="Company or person"></div>
+    <div class="form-group"><label>Invoice / Statement #</label><input type="text" name="invoice_number" value="{{ (f.invoice_number if f else '') or '' }}" placeholder="Unique to this bill"></div>
+    <div class="form-group"><label>Account #</label><input type="text" name="account_number" value="{{ (f.account_number if f else '') or '' }}" placeholder="Ongoing account number"></div>
+    <div class="form-group"><label>Amount ($)</label><input type="text" name="amount" value="{{ '{:.2f}'.format(f.amount) if f and f.amount else '' }}" placeholder="0.00"></div>
+    <div class="form-group"><label>Due Date</label><input type="date" name="due_date" id="due_date" value="{{ (f.due_date if f else '') or '' }}"></div>
+    <div class="form-group"><label>Status</label><select name="status">{% set cur_st=(f.status if f else 'Pending') or 'Pending' %}{% for st in ['Pending','In Progress','Processed','Paid','Filed','On Hold'] %}<option value="{{ st }}" {{ 'selected' if cur_st==st else '' }}>{{ st }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Processed By</label>
+      <div style="padding:8px 12px;color:var(--mid);font-size:.9rem;">{{ entry.processed_by if entry and entry.processed_by else session.user }} {% if not entry %}<em style="font-size:.8rem;">(you)</em>{% endif %}</div>
+    </div>
+    <div class="form-group"></div>
+    {# Report #54 — "these bills should be applied 50/50 to KLR & LRC & there is no
+       radio button ... with a combined KLR/LRC." Entity stays single (it's who pays);
+       a bill belonging to more than one entity records the division here. This used to
+       be reachable only from the pay panel, which is why it had never once been used --
+       a bill that arrived already paid, like the one Nancy reported, never showed it. #}
+    <div class="form-group full" id="alloc-block">
+      <input type="hidden" name="split_block" value="1">
+      <label>Split across entities
+        <span style="font-weight:normal;color:var(--mid);font-size:.8rem;">
+          &mdash; optional; leave empty unless this bill is shared. Entity above is whoever pays it.</span>
+      </label>
+      {# Row template for when there's nothing to clone (a bill with no split yet). #}
+      <template id="alloc-proto"><select name="split_entity" style="max-width:230px;">
+            <option value="">&mdash; Entity &mdash;</option>
+            {% for e in cfg.entities %}<option value="{{ e.code }}">{{ e.code }} &ndash; {{ e.name }}</option>{% endfor %}
+          </select>
+          <span>$</span>
+          <input type="text" name="split_amount" class="alloc-amt" inputmode="decimal" style="max-width:120px;">
+          <button type="button" class="btn btn-ghost btn-sm alloc-del">&times;</button></template>
+      <div id="alloc-rows" style="display:flex;flex-direction:column;gap:6px;">
+        {% for s in (payment_splits or []) %}
+        <div class="alloc-row" style="display:flex;align-items:center;gap:8px;">
+          <select name="split_entity" style="max-width:230px;">
+            <option value="">&mdash; Entity &mdash;</option>
+            {% for e in cfg.entities %}<option value="{{ e.code }}" {{ 'selected' if s.entity_code==e.code else '' }}>{{ e.code }} &ndash; {{ e.name }}</option>{% endfor %}
+          </select>
+          <span>$</span>
+          <input type="text" name="split_amount" class="alloc-amt" inputmode="decimal" style="max-width:120px;"
+                 value="{{ '{:.2f}'.format(s.amount) if s.amount is not none else '' }}">
+          <button type="button" class="btn btn-ghost btn-sm alloc-del">&times;</button>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <button type="button" class="btn btn-ghost btn-sm" id="alloc-add">+ Add entity</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="alloc-even">Split evenly</button>
+        {% if split_entities %}
+        <button type="button" class="btn btn-ghost btn-sm" id="alloc-units"
+                data-weights="{{ split_entities | tojson | forceescape }}">By units</button>
+        {% endif %}
+        <span id="alloc-remainder" style="font-size:.82rem;color:var(--mid);"></span>
+      </div>
+    </div>
+    <div class="form-group full"><label>Notes</label><textarea name="notes">{{ (f.notes if f else '') or '' }}</textarea></div>
+    {% if entry and entry.status == 'Paid' %}
+    <div class="form-group full" style="background:var(--pale);border-radius:8px;padding:14px;border-left:4px solid #1565C0;">
+      <div style="font-size:.85rem;font-weight:600;color:#1565C0;margin-bottom:10px;">&#10003; Payment Record</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <div class="form-group"><label>Paid Date</label><input type="date" name="paid_date" value="{{ entry.paid_date or '' }}"></div>
+        <div class="form-group"><label>Amount Paid ($)</label><input type="text" name="paid_amount" value="{{ '{:.2f}'.format(entry.paid_amount) if entry.paid_amount else '' }}" placeholder="0.00"></div>
+        <div class="form-group"><label>Paid By</label>
+          <div style="padding:8px 12px;color:var(--mid);font-size:.9rem;">{{ entry.paid_by or '—' }}</div>
+        </div>
+        <div class="form-group"><label>Method</label>
+          <select name="payment_method" onchange="document.getElementById('edit-check-wrap').style.display=(this.value==='Check')?'':'none'">
+            <option value="">—</option>
+            {% for m in ['Check','ACH','Credit Card','Phone'] %}<option value="{{ m }}" {{ 'selected' if entry.payment_method==m else '' }}>{{ m }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group" id="edit-check-wrap" style="{{ '' if entry.payment_method=='Check' else 'display:none;' }}"><label>Check #</label>
+          <input type="text" name="check_number" value="{{ entry.check_number or '' }}" placeholder="e.g. 13386"></div>
+        <div class="form-group"><label>Note</label>
+          <input type="text" name="payment_note" value="{{ entry.payment_note or '' }}" placeholder="confirmation #, memo…"></div>
+      </div>
+    </div>
+    {% endif %}
+    {{ date_guard_box() }}
+    <div class="form-group full" style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+      <button type="submit" class="btn btn-success">{{ 'Save Changes' if entry else '+ Log Entry' }}</button>
+      <a href="{{ request.referrer or '/log' }}" class="btn btn-ghost">Cancel</a>
+    </div>
+    {% if entry %}
+    <div class="form-group full" style="margin-top:18px;padding-top:14px;border-top:1px dashed #ddd;display:flex;justify-content:flex-end;">
+      <form method="POST" action="/entry/{{ entry.id }}/delete" style="margin:0;" onsubmit="return confirm('Permanently delete entry {{ entry.record_no or '#' ~ entry.id }}? This cannot be undone.')">
+        <button type="submit" class="btn btn-sm" style="background:transparent;color:#c00;border:1.5px solid #c00;" title="Permanently delete this record">&#128465; Delete this record</button>
+      </form>
+    </div>
+    {% endif %}
+  </div></form>
+</div></div>
+
+</div>
+{% if entry and entry.status != 'Paid' %}
+<div id="pay-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;">
+  <div class="card" style="width:400px;max-width:95vw;">
+    <div class="card-header" style="background:#1565C0;">&#10003; Mark as Paid &mdash; {{ entry.record_no or '#' ~ entry.id }} {{ entry.vendor or '' }}</div>
+    <div class="card-body">
+      <form method="POST" action="/entry/{{ entry.id }}/pay" enctype="multipart/form-data">
+        <div class="form-grid">
+          <div class="form-group full"><label>Paid Date *</label><input type="date" name="paid_date" value="{{ today }}" required></div>
+          <div class="form-group full"><label>Amount Paid ($)</label>
+            <input type="text" name="paid_amount" value="{{ '{:.2f}'.format(entry.amount) if entry.amount else '' }}" placeholder="0.00">
+            <small style="color:var(--mid);">Leave blank to use billed amount</small>
+          </div>
+          <div class="form-group full"><label>Payment Method</label>
+            <select name="payment_method" onchange="document.getElementById('modal-check-wrap').style.display=(this.value==='Check')?'':'none'">
+              <option value="">—</option>
+              {% for m in ['Check','ACH','Credit Card','Phone'] %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group full" id="modal-check-wrap" style="display:none;"><label>Check #</label>
+            <input type="text" name="check_number" placeholder="e.g. 13386"></div>
+          <div class="form-group full"><label>Note</label>
+            <input type="text" name="payment_note" placeholder="confirmation #, memo…"></div>
+          <div class="form-group full"><label>Attach Receipt (optional)</label>
+            <input type="file" name="receipt" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx" style="font-size:.85rem;">
+            <small style="color:var(--mid);">Uploads when you save — no separate upload step.</small>
+          </div>
+          <div class="form-group full" style="font-size:.83rem;color:var(--mid);">Recorded as paid by <strong>{{ session.user }}</strong></div>
+          <div class="form-group full" style="display:flex;gap:8px;margin-top:4px;">
+            <button type="submit" class="btn btn-success">Save Payment</button>
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('pay-modal').style.display='none'">Cancel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+<script>
+function sortProps(){
+  const list=document.getElementById('prop-list'); if(!list) return;
+  const items=Array.from(list.querySelectorAll('.prop-item'));
+  items.sort((a,b)=>(a.querySelector('input').checked?0:1)-(b.querySelector('input').checked?0:1));
+  items.forEach(el=>list.appendChild(el));
+}
+function filterProps(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('.prop-item').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(q)?'':'none';});
+}
+
+// Report #20 — show only the units of the properties actually ticked. A unit box that
+// gets hidden is also unticked, so what's on screen is what saves (the server filters
+// the same way, but leaving stale ticks in the DOM would misreport the form's state).
+function syncUnits(){
+  const block=document.getElementById('unit-block'); if(!block) return;
+  const chosen=new Set(Array.from(
+    document.querySelectorAll('#prop-list input[name=property_codes]:checked')).map(i=>i.value));
+  let shown=0;
+  document.querySelectorAll('.unit-item').forEach(el=>{
+    const on=chosen.has(el.dataset.prop);
+    el.style.display=on?'inline-flex':'none';
+    if(on){ shown++; } else { el.querySelector('input').checked=false; }
+  });
+  block.style.display=chosen.size?'':'none';
+  document.getElementById('unit-list').style.display=shown?'':'none';
+  document.getElementById('unit-empty').style.display=(chosen.size&&!shown)?'':'none';
+}
+document.querySelectorAll('#prop-list input[name=property_codes]')
+        .forEach(i=>i.addEventListener('change', syncUnits));
+
+// Report #54 — split a shared bill across entities, from the edit form.
+(function(){
+  const rows=document.getElementById('alloc-rows'); if(!rows) return;
+  const billAmount=()=>{
+    const el=document.querySelector('input[name=amount]');
+    const v=parseFloat((el&&el.value||'').replace(/[^0-9.\-]/g,''));
+    return isNaN(v)?0:v;
+  };
+  function blankRow(){
+    const proto=rows.querySelector('.alloc-row');
+    let el;
+    if(proto){
+      el=proto.cloneNode(true);
+      el.querySelector('select').selectedIndex=0;
+      el.querySelector('.alloc-amt').value='';
+    } else {
+      el=document.createElement('div');
+      el.className='alloc-row';
+      el.style.cssText='display:flex;align-items:center;gap:8px;';
+      el.appendChild(document.getElementById('alloc-proto').content.cloneNode(true));
+    }
+    rows.appendChild(el); wire(el); return el;
+  }
+  function recalc(){
+    const amts=Array.from(rows.querySelectorAll('.alloc-amt'))
+      .map(i=>parseFloat(i.value.replace(/[^0-9.\-]/g,''))).filter(v=>!isNaN(v));
+    const out=document.getElementById('alloc-remainder');
+    if(!amts.length){ out.textContent=''; return; }
+    const sum=amts.reduce((a,b)=>a+b,0), total=billAmount();
+    const diff=total-sum;
+    out.textContent = Math.abs(diff)<0.005
+      ? 'adds up to $'+sum.toFixed(2)
+      : (diff>0?'$'+diff.toFixed(2)+' unallocated':'$'+Math.abs(diff).toFixed(2)+' over the bill amount');
+    out.style.color = Math.abs(diff)<0.005 ? '#2e7d32' : '#b00';
+  }
+  function spread(weights){
+    // Largest-remainder: pennies land on the biggest shares, so the rows always
+    // add back to the bill exactly instead of drifting a cent.
+    const total=Math.round(billAmount()*100);
+    const tw=weights.reduce((a,w)=>a+w[1],0); if(!tw||!total) return;
+    let alloc=weights.map(w=>({code:w[0], exact:total*w[1]/tw}));
+    alloc.forEach(a=>{a.cents=Math.floor(a.exact); a.rem=a.exact-a.cents;});
+    let left=total-alloc.reduce((a,b)=>a+b.cents,0);
+    alloc.slice().sort((a,b)=>b.rem-a.rem).forEach(a=>{ if(left>0){a.cents++; left--;} });
+    rows.innerHTML='';
+    alloc.forEach(a=>{
+      const el=blankRow();
+      el.querySelector('select').value=a.code;
+      el.querySelector('.alloc-amt').value=(a.cents/100).toFixed(2);
+    });
+    recalc();
+  }
+  function wire(el){
+    el.querySelector('.alloc-del').addEventListener('click',()=>{el.remove(); recalc();});
+    el.querySelector('.alloc-amt').addEventListener('input', recalc);
+  }
+  rows.querySelectorAll('.alloc-row').forEach(wire);
+  document.getElementById('alloc-add').addEventListener('click',()=>blankRow());
+  document.getElementById('alloc-even').addEventListener('click',()=>{
+    const codes=Array.from(rows.querySelectorAll('select')).map(s=>s.value).filter(Boolean);
+    if(codes.length<2){ alert('Add the entities to split between first.'); return; }
+    spread(codes.map(c=>[c,1]));
+  });
+  const byUnits=document.getElementById('alloc-units');
+  if(byUnits){ byUnits.addEventListener('click',()=>spread(JSON.parse(byUnits.dataset.weights))); }
+  const amt=document.querySelector('input[name=amount]');
+  if(amt){ amt.addEventListener('input', recalc); }
+  recalc();
+})();
+
+sortProps();  // move already-selected properties to the top on load
+syncUnits();
+</script>
+{# Year-sanity guard: on an EDIT the stored dates were approved by a person
+   already (old records are legitimately old) — only question a date the user
+   just changed. On a new entry the form loads with today, so checking on load
+   is harmless and catches prefill oddities. #}
+{{ date_guard_script('received_date', 'due_date', not entry) }}
+{% endblock %}

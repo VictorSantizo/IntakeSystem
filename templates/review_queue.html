@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Needs Review</h1>
+<div style="display:flex;align-items:center;gap:8px;margin:8px 0 16px;">
+<button class="btn btn-primary" id="scan-now-btn" data-kk="scan-now" onclick="scanNow()">&#128269; Check for new items</button>
+<button class="btn btn-ghost" id="cabinet-sweep-btn" data-kk="cabinet-sweep" onclick="cabinetSweep()" title="Just added a document straight into a file-server folder? This checks the archive right now and brings it into Klick Klack.">&#128452; Check the File Cabinet</button>
+<a href="/coversheet" target="_blank" class="btn btn-ghost" title="Print a batch cover sheet to place on top of a mail folder before scanning">&#9733; Print Cover Sheet</a>
+<form method="POST" action="/review/upload" enctype="multipart/form-data" style="display:inline;margin:0;">
+  <input type="file" name="documents" id="upload-docs-input" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff"
+         style="display:none;"
+         onchange="if(this.files.length){var b=document.getElementById('upload-docs-btn');b.disabled=true;b.textContent='Reading… (OCR + AI, a few seconds per file)';this.form.submit();}">
+  <button type="button" class="btn btn-ghost" id="upload-docs-btn" data-kk="upload-docs"
+          title="Add a PDF or image from this computer &mdash; it gets the same OCR + AI read as a scan, then shows up in today's batch below"
+          onclick="document.getElementById('upload-docs-input').click()">&#11014; Upload documents</button>
+</form>
+{% if is_admin %}<button class="btn btn-ghost" onclick="clearQueue()" style="border-color:#c00;color:#c00;" {% if not items %}disabled title="Queue is already empty"{% endif %}>&#10005; Clear Queue</button>{% endif %}
+{% if items %}<a href="/review/triage" data-kk="triage-btn" class="btn btn-ghost" title="Find and clear duplicate documents in the queue in bulk">&#9878;&#65039; Duplicate Triage</a>{% endif %}
+{% if filtered_count and filtered_count > 0 %}<a href="/filtered" class="btn btn-ghost" title="Email attachments the AI filtered out as non-bills">&#128462; Filtered <span class="badge" style="background:var(--mid);">{{ filtered_count }}</span></a>{% endif %}
+<span class="subtitle" style="margin:0;">Scanned documents waiting for classification review before logging</span>
+</div>
+<div id="scan-msg" style="display:none;" class="alert alert-info"></div>
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+
+{% if ai_failed_count %}
+<div class="alert alert-warning">
+  &#9888;&#65039; <strong>{{ ai_failed_count }} document{{ 's' if ai_failed_count != 1 else '' }}</strong>
+  arrived while AI classification was unavailable &mdash; the details shown for
+  {{ 'them' if ai_failed_count != 1 else 'it' }} are rough keyword guesses, not AI reads.
+  {% if ai_fail_reason %}<div style="font-size:.8rem;color:var(--mid);margin-top:4px;">Last error: {{ ai_fail_reason }}</div>{% endif %}
+  {% if is_admin %}
+  <form method="POST" action="/review/reclassify" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    {% if reclassify_running %}
+    <button type="submit" class="btn btn-primary btn-sm" disabled>Re-running&hellip;</button>
+    {% else %}
+    <button type="submit" class="btn btn-primary btn-sm">&#8635; Re-run AI on these {{ ai_failed_count }}</button>
+    {% endif %}
+    <span style="font-size:.8rem;color:var(--mid);">Fix the API problem first (key or billing at console.anthropic.com), then click &mdash; junk drains to Filtered and predictable bills file themselves.</span>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if is_admin and items and not ai_failed_count %}
+<div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+  <span>&#129529; Queue looking stale? Re-run today's smarter AI over everything below &mdash;
+    junk drains to Filtered, predictable bills file themselves, the rest get fresh labels.</span>
+  <form method="POST" action="/review/reclassify"
+        onsubmit="return confirm('Re-run AI on all {{ items|length }} queued documents? One API call each.');">
+    <input type="hidden" name="scope" value="all">
+    {% if reclassify_running %}
+    <button type="submit" class="btn btn-ghost btn-sm" disabled>Re-running&hellip;</button>
+    {% else %}
+    <button type="submit" class="btn btn-primary btn-sm">&#8635; Refresh AI on whole queue ({{ items|length }})</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+{% if auto_filed_recent %}
+<div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+  <span>&#129302; <strong>{{ auto_filed_recent }} bill{{ 's' if auto_filed_recent != 1 else '' }}</strong> auto-filed in the last 7 days &mdash; high confidence, matching what staff confirmed before, no duplicate signals.</span>
+  <a href="/log?processed_by=Auto" class="btn btn-ghost btn-sm">Spot-check &rarr;</a>
+</div>
+{% endif %}
+{% if not items %}
+<div class="alert alert-info">&#9989; No documents waiting. When a new PDF is saved to your scan folder, it will appear here automatically.</div>
+<a href="/entry/new" class="btn btn-primary">+ Add Manual Entry</a>
+{% else %}
+{% set urgent_count = urgent_ids|length %}
+<div class="alert alert-warning">&#9888;&#65039; <strong>{{ items|length }} document{{ 's' if items|length != 1 else '' }}</strong> need{{ '' if items|length != 1 else 's' }} review &mdash;
+  &#128181; <strong>{{ bill_items|length }} bill{{ 's' if bill_items|length != 1 else '' }}</strong>{% if urgent_count %} <span style="color:var(--red);font-weight:bold;">(&#9200; {{ urgent_count }} past due &mdash; first in the list)</span>{% endif %}
+  &nbsp;&middot;&nbsp; &#128451; {{ other_items|length }} housekeeping (statements, notices &amp; other paperwork &mdash; nothing to pay in there).</div>
+
+{% set batches = [] %}{% set receiveds = [] %}{% set doctypes = [] %}{% set entities = [] %}{% set billtypes = [] %}
+{% for sid, d in items %}
+  {% if d.batch_number and d.batch_number not in batches %}{% set _ = batches.append(d.batch_number) %}{% endif %}
+  {% if d.received_date and d.received_date not in receiveds %}{% set _ = receiveds.append(d.received_date) %}{% endif %}
+  {% if d.doc_type and d.doc_type not in doctypes %}{% set _ = doctypes.append(d.doc_type) %}{% endif %}
+  {% if d.entity_code and d.entity_code not in entities %}{% set _ = entities.append(d.entity_code) %}{% endif %}
+  {% if d.bill_type_code and d.bill_type_code not in billtypes %}{% set _ = billtypes.append(d.bill_type_code) %}{% endif %}
+{% endfor %}
+{% set any_filter_active = request.args.get('batch') or request.args.get('received') or request.args.get('doctype') or request.args.get('entity') or request.args.get('billtype') or request.args.get('conf') or request.args.get('q') %}
+{% set filters_open = (items|length >= 15) or any_filter_active %}
+{# The 7-control filter bar only earns its space once the queue is big enough
+   that scanning it by eye stops working, or a filter is already applied
+   (e.g. arriving from a filtered link elsewhere). Collapsed otherwise. #}
+<div class="form-group full" style="margin-bottom:10px;">
+  <a href="#" id="filters-toggle" onclick="toggleFilters();return false;"
+     style="font-size:.85rem;color:var(--blue);text-decoration:none;font-weight:600;">
+    {{ '&#9662; Hide filters'|safe if filters_open else '&#9656; Filters'|safe }}
+  </a>
+</div>
+<div class="filter-bar" id="filters-box" style="margin-bottom:14px;{{ '' if filters_open else 'display:none;' }}">
+  <div class="form-group"><label>&#128451; Batch</label>
+    <select id="f-batch" onchange="applyReviewFilters()"><option value="">All batches</option>
+      {# Newest batch first — report #63 (Karen): today's scanning is what you filter to. #}
+      {% for b in batches|sort(reverse=true) %}<option value="{{ b }}" {{ 'selected' if request.args.get('batch')==b else '' }}>{{ b }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="form-group"><label>&#128229; Received date</label>
+    <select id="f-received" onchange="applyReviewFilters()"><option value="">Any date</option>
+      {% for r in receiveds|sort %}<option value="{{ r }}" {{ 'selected' if request.args.get('received')==r else '' }}>{{ r }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="form-group"><label>Type</label>
+    <select id="f-doctype" onchange="applyReviewFilters()"><option value="">All types</option>
+      {% for t in doctypes|sort %}<option value="{{ t }}" {{ 'selected' if request.args.get('doctype')==t else '' }}>{{ t }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="form-group"><label>&#127963; Entity</label>
+    <select id="f-entity" onchange="applyReviewFilters()"><option value="">All entities</option>
+      {% for e in entities|sort %}<option value="{{ e }}" {{ 'selected' if request.args.get('entity')==e else '' }}>{{ e }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="form-group"><label>Bill type</label>
+    <select id="f-billtype" onchange="applyReviewFilters()"><option value="">All bill types</option>
+      {% for bt in billtypes|sort %}<option value="{{ bt }}" {{ 'selected' if request.args.get('billtype')==bt else '' }}>{{ bt }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="form-group"><label>Confidence</label>
+    <select id="f-conf" onchange="applyReviewFilters()"><option value="">All</option>
+      <option value="high" {{ 'selected' if request.args.get('conf')=='high' else '' }}>High</option>
+      <option value="medium" {{ 'selected' if request.args.get('conf')=='medium' else '' }}>Medium</option>
+      <option value="low" {{ 'selected' if request.args.get('conf')=='low' else '' }}>Low</option>
+    </select>
+  </div>
+  <div class="form-group" style="flex:1;min-width:150px;"><label>Search</label>
+    <input id="f-search" type="text" placeholder="vendor, file, property…" value="{{ request.args.get('q','') }}" oninput="applyReviewFilters()">
+  </div>
+  <button type="button" class="btn btn-ghost btn-sm" onclick="clearReviewFilters()">Clear</button>
+  <span id="filter-count" class="subtitle" style="margin:0;align-self:center;"></span>
+</div>
+
+<form id="bulkform" method="POST" action="/review/bulk_confirm">
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;background:var(--pale);padding:10px 14px;border-radius:8px;">
+  <strong style="color:var(--navy);">&#9889; Fast lane</strong>
+  <button type="submit" class="btn btn-success" onclick="return confirm('Confirm the selected item(s)? They are logged straight from the AI values; any that look like duplicates are left here for individual review.')">&#10003; Confirm Selected (<span id="sel-count">0</span>)</button>
+  <button type="submit" formaction="/review/print" formtarget="_blank" class="btn btn-ghost" title="Merge the selected documents into one PDF and open it to print on paper">&#128424;&#65039; Print Selected (<span id="print-count">0</span>)</button>
+  <button type="button" class="btn btn-ghost btn-sm" onclick="selectConf('high')">Select all high-confidence</button>
+  <button type="button" class="btn btn-ghost btn-sm" onclick="selectConf('none')" title="Untick every selected item">Untick all</button>
+  <span class="subtitle" style="margin:0;font-size:.8rem;">Logs the predictable ones in one click &mdash; possible duplicates are skipped for manual review.</span>
+</div>
+{# One card, used by both sections below. Bills come first in received order
+   (how Karen pays); everything else is housekeeping, collapsed so the tidy-up
+   backlog stops burying the payable work (Joshua 8/6, from the 8/3 session). #}
+{% macro review_card(scan_id, data, overdue) %}
+<div class="card review-card"
+  data-batch="{{ data.batch_number or '' }}"
+  data-received="{{ data.received_date or '' }}"
+  data-doctype="{{ data.doc_type or '' }}"
+  data-entity="{{ data.entity_code or '' }}"
+  data-billtype="{{ data.bill_type_code or '' }}"
+  data-conf="{{ (data.ai_confidence or 'none').lower() }}"
+  {# What this card can be found by. The FILE NAME is in here for report #95:
+     a held row carries the AI's reading of the vendor ("Midvalley Station"),
+     not the name on the file Nancy was typing. Invoice/account numbers,
+     amount, doc type and batch joined it with #16, so the queue page finds a
+     document by the same words the universal search box now does. #}
+  data-search="{{ ((data.vendor or '') ~ ' ' ~ (data.pdf_path.split('\\')[-1]) ~ ' ' ~ (data.property_code or '') ~ ' ' ~ (data.entity_code or '') ~ ' ' ~ (data.invoice_number or '') ~ ' ' ~ (data.account_number or '') ~ ' ' ~ (data.doc_type or '') ~ ' ' ~ (data.amount or '') ~ ' ' ~ (data.batch_number or ''))|lower }}"
+  style="{% if overdue %}border-left:5px solid var(--red);{% endif %}"><div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+  <input type="checkbox" name="scan_ids" value="{{ scan_id }}" class="bulk-chk" data-conf="{{ (data.ai_confidence or 'none').lower() }}" onchange="updateSelCount()" style="width:20px;height:20px;flex:0 0 auto;" title="Select for fast-lane confirm">
+  <div style="font-size:2.5rem;">&#128196;</div>
+  <div style="flex:1;min-width:200px;">
+    <div style="font-weight:bold;color:var(--navy);font-size:1rem;">
+      {% if overdue %}<span style="background:var(--red);color:#fff;padding:2px 9px;border-radius:10px;font-size:.72rem;font-weight:bold;vertical-align:middle;margin-right:6px;">&#9200; PAST DUE</span>{% endif %}{% if data.important %}<span style="background:var(--orange);color:#fff;padding:2px 9px;border-radius:10px;font-size:.72rem;font-weight:bold;vertical-align:middle;margin-right:6px;" title="{{ data.important_reason or 'AI flagged this as important' }}">&#9873; IMPORTANT</span>{% endif %}{{ data.pdf_path.split('\\')[-1] }}</div>
+    {# House rule (#33/#36): staff-facing paths render as full UNC, never a
+       drive letter — Nancy's desk maps the share as Z:, not T:. #}
+    <div style="font-size:.82rem;color:var(--mid);margin-top:2px;">{{ data.pdf_path|unc }}</div>
+    <div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;font-size:.85rem;">
+      <span>&#128193; <strong>{{ data.doc_type or 'Unknown' }}</strong></span>
+      {% if data.vendor %}<span>&#127970; {{ data.vendor }}</span>{% endif %}
+      {% if data.amount %}<span>&#128176; ${{ "{:,.2f}".format(data.amount) }}</span>{% endif %}
+      {% if data.due_date %}<span style="{% if overdue %}color:var(--red);font-weight:bold;{% endif %}">&#128197; Due {{ data.due_date }}</span>{% endif %}
+      {% if data.entity_code %}<span>&#127963; {{ data.entity_code }}</span>{% endif %}
+      {% if data.property_code %}<span>&#127968; {{ data.property_code }}</span>{% endif %}
+      {% if data.received_date %}<span title="Mail received date (drives payment order)">&#128229; Rec'd {{ data.received_date }}{% if data.received_date_assumed %} <span style="color:var(--red);">&#9888;</span>{% endif %}</span>{% endif %}
+      {% if data.batch_number %}<span title="Scanning batch">&#128451; {{ data.batch_number }}</span>{% endif %}
+      <span class="conf-{{ (data.ai_confidence or 'none').lower() }}">AI: {{ data.ai_confidence or 'None' }}</span>
+    </div>
+  </div>
+  <a href="/review/{{ scan_id }}" onclick="location.href=reviewUrl({{ scan_id }});return false;" class="btn {% if overdue %}btn-success{% else %}btn-orange{% endif %}" {% if overdue %}style="background:var(--red);"{% endif %}>Review &amp; Confirm &rarr;</a>
+</div></div>
+{% endmacro %}
+
+<div style="font-weight:700;color:var(--navy);font-size:1.02rem;margin-bottom:10px;">
+  &#128181; Bills &mdash; {{ bill_items|length }} to log, oldest received first
+</div>
+{% if bill_items %}
+<div style="display:grid;gap:16px;">
+{% for scan_id, data in bill_items %}{{ review_card(scan_id, data, scan_id in urgent_ids) }}{% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">&#9989; No bills waiting &mdash; only the housekeeping below.</div>
+{% endif %}
+
+{% if other_items %}
+<details id="hk-details" style="margin-top:20px;"{{ ' open' if not bill_items else '' }}>
+  <summary style="cursor:pointer;font-weight:700;color:var(--navy);font-size:1.02rem;padding:8px 0;">
+    &#128451; Housekeeping &mdash; {{ other_items|length }} statement{{ 's' if other_items|length != 1 else '' }}, notices &amp; other paperwork (no payments in here)
+  </summary>
+  <div style="display:grid;gap:16px;margin-top:12px;">
+  {% for scan_id, data in other_items %}{{ review_card(scan_id, data, scan_id in urgent_ids) }}{% endfor %}
+  </div>
+</details>
+{% endif %}
+</form>
+{% endif %}
+<script>
+function updateSelCount(){var n=document.querySelectorAll('.bulk-chk:checked').length;var el=document.getElementById('sel-count');if(el)el.textContent=n;var p=document.getElementById('print-count');if(p)p.textContent=n;}
+function cardOnScreen(card){
+  // Visible = not filtered out AND not tucked inside the closed housekeeping
+  // box — select-all must never tick items the person can't see.
+  if(card.style.display==='none') return false;
+  var det=card.closest('details');
+  return !det || det.open;
+}
+function selectConf(mode){
+  // Only act on cards currently visible (respect the filters above).
+  document.querySelectorAll('.review-card').forEach(function(card){
+    var c=card.querySelector('.bulk-chk'); if(!c) return;
+    var visible=cardOnScreen(card);
+    if(mode==='none') c.checked=false;
+    else if(mode==='high') c.checked=(visible && c.dataset.conf==='high');
+    else c.checked=visible;
+  });
+  updateSelCount();
+}
+function _fv(id){var e=document.getElementById(id);return e?e.value.trim():'';}
+function applyReviewFilters(){
+  var b=_fv('f-batch'), rd=_fv('f-received'), dt=_fv('f-doctype'), en=_fv('f-entity'), bt=_fv('f-billtype'), cf=_fv('f-conf'), q=_fv('f-search').toLowerCase();
+  var shown=0, total=0;
+  document.querySelectorAll('.review-card').forEach(function(card){
+    total++;
+    var ok=true;
+    if(b && card.dataset.batch!==b) ok=false;
+    if(rd && card.dataset.received!==rd) ok=false;
+    if(dt && card.dataset.doctype!==dt) ok=false;
+    if(en && card.dataset.entity!==en) ok=false;
+    if(bt && card.dataset.billtype!==bt) ok=false;
+    if(cf && card.dataset.conf!==cf) ok=false;
+    if(q && (card.dataset.search||'').indexOf(q)===-1) ok=false;
+    card.style.display = ok ? '' : 'none';
+    if(ok) shown++;
+    if(!ok){var chk=card.querySelector('.bulk-chk'); if(chk) chk.checked=false;}  // don't keep hidden items selected
+  });
+  var c=document.getElementById('filter-count'); if(c) c.textContent = (b||rd||dt||en||bt||cf||q) ? (shown+' of '+total+' shown') : '';
+  // A filter can match items inside the collapsed housekeeping box — open it
+  // so those matches aren't invisibly "shown".
+  var det=document.getElementById('hk-details');
+  if(det && (b||rd||dt||en||bt||cf||q)) det.open=true;
+  updateSelCount();
+}
+function toggleFilters(){
+  var box=document.getElementById('filters-box');
+  var link=document.getElementById('filters-toggle');
+  if(!box||!link) return;
+  var show = box.style.display==='none';
+  box.style.display = show ? '' : 'none';
+  link.innerHTML = show ? '&#9662; Hide filters' : '&#9656; Filters';
+}
+function clearReviewFilters(){
+  ['f-batch','f-received','f-doctype','f-entity','f-billtype','f-conf','f-search'].forEach(function(id){var e=document.getElementById(id); if(e) e.value='';});
+  applyReviewFilters();
+}
+function reviewUrl(id){
+  // Carry the active filters into the detail view so Prev/Next/Confirm stay in-group.
+  var p=new URLSearchParams();
+  var b=_fv('f-batch'), rd=_fv('f-received'), dt=_fv('f-doctype'), en=_fv('f-entity'), bt=_fv('f-billtype'), cf=_fv('f-conf'), q=_fv('f-search');
+  if(b)p.set('batch',b); if(rd)p.set('received',rd); if(dt)p.set('doctype',dt); if(en)p.set('entity',en); if(bt)p.set('billtype',bt); if(cf)p.set('conf',cf); if(q)p.set('q',q);
+  var s=p.toString();
+  return '/review/'+id+(s?('?'+s):'');
+}
+// Apply any filter carried in the URL (e.g. returning from the detail view) on load.
+applyReviewFilters();
+function clearQueue(){
+  if(!confirm('Remove all items from the queue? This does not delete the PDF files.')) return;
+  fetch('/api/clear_queue',{method:'POST'}).then(()=>location.reload());
+}
+function scanNow(){
+  const btn=document.getElementById('scan-now-btn');
+  const msg=document.getElementById('scan-msg');
+  btn.disabled=true; btn.textContent='Scanning…';
+  fetch('/api/scan_now',{method:'POST'}).then(r=>r.json()).then(d=>{
+    msg.style.display='';
+    if(d.ok){
+      msg.className='alert ' + (d.email_error ? 'alert-warning' : 'alert-info');
+      if(d.scanning){
+        msg.textContent = `Scanning ${d.files} document${d.files!==1?'s':''} in the background — they'll appear over the next few minutes (the count above updates as they finish).` + (d.email_error ? ('  (Email: ' + d.email_error + ')') : '');
+        setTimeout(()=>location.reload(), 8000);
+      } else {
+        msg.textContent = 'No new documents found.' + (d.email_error ? ('  (Email: ' + d.email_error + ')') : '');
+        btn.disabled=false; btn.textContent='⌕ Check for new items';
+      }
+    } else {
+      msg.className='alert alert-warning';
+      msg.textContent='Error: '+d.error;
+      btn.disabled=false; btn.textContent='⌕ Check for new items';
+    }
+  });
+}
+function cabinetSweep(){
+  const btn=document.getElementById('cabinet-sweep-btn');
+  const msg=document.getElementById('scan-msg');
+  btn.disabled=true; btn.textContent='Checking…';
+  fetch('/api/cabinet_sweep',{method:'POST'}).then(r=>r.json()).then(()=>{
+    msg.style.display='';
+    msg.className='alert alert-info';
+    msg.textContent='Checking the file cabinet for newly added documents — clear cases are logged automatically, anything needing a decision appears in this queue within a minute or two.';
+    setTimeout(()=>{ btn.disabled=false; btn.textContent='🗄 Check the File Cabinet'; }, 8000);
+  }).catch(()=>{
+    btn.disabled=false; btn.textContent='🗄 Check the File Cabinet';
+  });
+}
+</script>
+{% endblock %}

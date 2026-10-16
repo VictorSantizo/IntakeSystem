@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klick Klack — Today</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="topbar">
+  <a class="wordmark" href="index.html">Klick Klack</a>
+  <nav>
+    <a href="index.html" class="here">Today</a>
+    <a href="review.html">Review</a>
+    <a href="pay.html">Pay</a>
+    <a href="find.html">Find</a>
+    <a href="#">The desk</a>
+  </nav>
+  <span class="who">Fri, Jul 31 · Karen</span>
+</div>
+<div class="wrap">
+
+  <div class="eyebrow">Today</div>
+  <h1 id="headline">Three things need you. <em>One is time-sensitive.</em></h1>
+  <p class="sub">Everything else is filed, paid, or quietly waiting its turn. Work top to bottom and you're done.</p>
+
+  <div id="busy-state">
+    <div class="rows">
+      <a class="row urgent" href="pay.html">
+        <span class="n">3</span>
+        <span class="what"><b>bills past due</b>
+          <span class="meta">$431.18 altogether — the largest is Bartlett Tree, $189.00</span></span>
+        <span class="go">catch up →</span>
+      </a>
+      <a class="row" href="review.html">
+        <span class="n">6</span>
+        <span class="what"><b>documents to review</b>
+          <span class="meta">4 from the mail pile, 2 from email — about five minutes</span></span>
+        <span class="go">start reviewing →</span>
+      </a>
+      <a class="row" href="#">
+        <span class="n">1</span>
+        <span class="what"><b>expected bill hasn't shown up</b>
+          <span class="meta">Frontier TL222 usually arrives by now — worth a check next week if still missing</span></span>
+        <span class="go">see it →</span>
+      </a>
+    </div>
+
+    <a class="next" href="pay.html">Pay the next bill — Frontier · $147.48
+      <small>oldest unpaid, received July 14 — you pay in received order</small></a>
+  </div>
+
+  <div id="clear-state" style="display:none;padding:34px 4px;border-bottom:1px solid var(--line);">
+    <div style="font-family:var(--serif);font-size:1.5rem;color:var(--sage);margin-bottom:4px;">All caught up.</div>
+    <div style="color:var(--ink-soft);font-size:.92rem;">Nothing waiting on review, nothing overdue, no missing bills. Nice.</div>
+  </div>
+  <button id="demo-toggle" style="margin-top:18px;font-size:.78rem;color:var(--ink-soft);background:none;border:none;border-bottom:1px dotted var(--ink-soft);cursor:pointer;padding:0;">preview a quiet day</button>
+
+  <div class="panel">
+    <h2>Worth a glance, no rush</h2>
+    <div class="rows">
+      <a class="row" href="record.html">
+        <span class="t legal">Legal</span>
+        <span class="what">Unlawful detainer served — T027-12
+          <span class="meta">court date August 12 — flagged by the AI, confirmed by Joshua</span></span>
+        <span class="date">Jul 28</span>
+      </a>
+      <a class="row" href="record.html">
+        <span class="t email">Email</span>
+        <span class="what">State Farm — non-renewal notice bundled with the PP16 bill
+          <span class="meta">arrived by email, so nobody opened an envelope for it</span></span>
+        <span class="date">Jul 30</span>
+      </a>
+      <a class="row" href="#">
+        <span class="t plain">Filtered</span>
+        <span class="what">14 junk email docs set aside this week
+          <span class="meta">nothing is ever deleted — glance any time</span></span>
+        <span class="date">recoverable</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="actions">
+    <a href="review.html">Review new mail</a>
+    <a href="pay.html">Pay bills</a>
+    <a href="find.html">Find a record</a>
+    <a href="#">Log something by hand</a>
+    <a href="#">The desk — your day as paper</a>
+  </div>
+
+  <div class="cream-box">
+    <p style="font-size:.95rem;">July so far: <b style="font-family:var(--serif);font-weight:400;font-size:1.15rem;">41 documents</b> in ·
+      <b style="font-family:var(--serif);font-weight:400;font-size:1.15rem;">$9,218.44</b> billed ·
+      <b style="font-family:var(--serif);font-weight:400;font-size:1.15rem;">$12,050.00</b> received</p>
+    <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:14px;background:#e9ded4;">
+      <i style="width:34%;background:var(--accent);"></i>
+      <i style="width:44%;background:var(--sage);"></i>
+      <i style="width:22%;background:#d8c9bb;"></i>
+    </div>
+    <div style="display:flex;gap:20px;margin-top:10px;font-size:.78rem;color:var(--ink-soft);">
+      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent);margin-right:6px;"></i>bills</span>
+      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--sage);margin-right:6px;"></i>income</span>
+      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#d8c9bb;margin-right:6px;"></i>statements &amp; other</span>
+    </div>
+    <details>
+      <summary>Break down by entity and type</summary>
+      <table class="quiet" style="margin-top:12px;">
+        <tr><th>Entity</th><th class="num">Items</th><th class="num">Bills</th><th class="num">Income</th></tr>
+        <tr><td>TRUST1</td><td class="num">14</td><td class="num">$3,412.10</td><td class="num">$5,200.00</td></tr>
+        <tr><td>TRUST2</td><td class="num">11</td><td class="num">$2,988.66</td><td class="num">$3,850.00</td></tr>
+        <tr><td>PP Properties</td><td class="num">9</td><td class="num">$1,706.20</td><td class="num">$3,000.00</td></tr>
+        <tr><td>TRUST3</td><td class="num">7</td><td class="num">$1,111.48</td><td class="num">—</td></tr>
+      </table>
+    </details>
+  </div>
+
+  <div class="panel">
+    <div class="section-label">Recent activity</div>
+    <div class="rows">
+      <div class="row" style="font-size:.87rem;color:var(--ink-soft);"><span class="date">10:42 am</span><span class="what"><b style="color:var(--ink);">Nancy</b> confirmed SoCal Edison — TL222 · $147.48</span></div>
+      <div class="row" style="font-size:.87rem;color:var(--ink-soft);"><span class="date">10:15 am</span><span class="what"><b style="color:var(--ink);">Karen</b> marked Bartlett Tree paid · CK#13386 · $1,890.00</span></div>
+      <div class="row" style="font-size:.87rem;color:var(--ink-soft);"><span class="date">9:58 am</span><span class="what"><b style="color:var(--ink);">System</b> filed 2 auto-confirmed bills (known vendors)</span></div>
+      <div class="row" style="font-size:.87rem;color:var(--ink-soft);"><span class="date">9:31 am</span><span class="what"><b style="color:var(--ink);">DeeAnna</b> passed the State Farm notice to Karen</span></div>
+      <div class="row" style="font-size:.87rem;color:var(--ink-soft);"><span class="date">9:02 am</span><span class="what"><b style="color:var(--ink);">System</b> pulled 3 attachments from the office Gmail</span></div>
+    </div>
+  </div>
+
+</div>
+<script>
+  var busy=document.getElementById('busy-state'),clear=document.getElementById('clear-state'),
+      head=document.getElementById('headline'),btn=document.getElementById('demo-toggle'),on=true;
+  btn.addEventListener('click',function(){on=!on;
+    busy.style.display=on?'':'none';clear.style.display=on?'none':'block';
+    head.style.display=on?'':'none';document.querySelector('.sub').style.display=on?'':'none';
+    btn.textContent=on?'preview a quiet day':'back to a busy day';});
+</script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+  <h1>&#9878;&#65039; Duplicate Triage</h1>
+  <span>
+    {% if is_admin %}<a href="/review/legacy_dupes" class="btn btn-ghost btn-sm" title="Records double-logged before deduplication existed — merge each group into one record">&#129529; Legacy duplicates</a>{% endif %}
+    <a href="/review" class="btn btn-ghost btn-sm">&larr; Needs Review</a>
+  </span>
+</div>
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+<p class="subtitle">Of <strong>{{ total }}</strong> items waiting for review, the checks below found
+  <strong>{{ certain|length + queue_dups|length }}</strong> exact duplicates,
+  <strong>{{ probable|length }}</strong> likely duplicates{% if near_queue %},
+  and <strong>{{ near_queue|length }}</strong> bill{{ 's' if near_queue|length != 1 else '' }} waiting in the queue more than once{% endif %}
+  &mdash; clear them here instead of one by one.
+  {{ rest }} item{{ 's' if rest != 1 else '' }} showed no duplicate signals and stay{{ '' if rest != 1 else 's' }} in the queue.</p>
+
+{% if certain or queue_dups %}
+<div class="card" style="margin-bottom:20px;border-left:5px solid #2E7D32;">
+  <div class="card-header" style="background:#2E7D32;">&#9989; Exact duplicates &mdash; safe to clear in one click</div>
+  <div class="card-body">
+    <p style="font-size:.9rem;color:var(--mid);margin-bottom:12px;">
+      These files are <strong>byte-for-byte identical</strong> to a document that is already in the system
+      &mdash; the same file arrived twice (re-sent email, re-scan, re-ingest). Clearing them files each one
+      as a &ldquo;copy&rdquo; under its existing record (shown in &ldquo;Copies on file&rdquo;), or sets aside repeats of
+      other queue items. <strong>Nothing is deleted.</strong>
+    </p>
+    <form method="POST" action="/review/triage/resolve_certain"
+          onsubmit="return confirm('Clear {{ certain|length + queue_dups|length }} exact duplicate(s)? Copies are attached to their existing records; nothing is deleted.')">
+      <button type="submit" class="btn btn-success" data-kk="triage-clear-exact">&#10003; Clear all {{ certain|length + queue_dups|length }} exact duplicates</button>
+    </form>
+    {% if certain %}
+    <div class="table-wrap" style="margin-top:14px;"><table>
+      <thead><tr><th>Queued file</th><th>Vendor</th><th>Amount</th><th>Same document as</th><th></th></tr></thead>
+      <tbody>
+      {% for it in certain %}
+      <tr>
+        <td style="font-size:.83rem;">{{ (it.data.pdf_path or '').split('\\')[-1] }}</td>
+        <td>{{ it.data.vendor or '—' }}</td>
+        <td class="amount">{% if it.data.amount %}${{ "{:,.2f}".format(it.data.amount) }}{% else %}—{% endif %}</td>
+        <td><a href="/entry/{{ it.entry.id }}/view" target="_blank" style="color:var(--blue);font-weight:600;">{{ it.entry.record_no or '#' ~ it.entry.id }} {{ it.entry.vendor or '' }}</a>
+            <span style="color:var(--mid);font-size:.8rem;">({{ it.entry.status }})</span></td>
+        <td><a href="/review/{{ it.sid }}" class="btn btn-ghost btn-sm">Look first</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% endif %}
+    {% if queue_dups %}
+    <div style="margin-top:10px;font-size:.85rem;color:var(--mid);">
+      Plus {{ queue_dups|length }} file{{ 's' if queue_dups|length != 1 else '' }} identical to <em>another item already in the queue</em>
+      (the kept copy stays for review; the repeats are set aside).
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if probable %}
+<div class="card" style="margin-bottom:20px;border-left:5px solid var(--orange);">
+  <div class="card-header" style="background:var(--orange);">&#9888;&#65039; Likely duplicates &mdash; a quick look each</div>
+  <div class="card-body" style="padding:0;">
+    <div style="padding:14px 20px;font-size:.9rem;color:var(--mid);">
+      Same vendor and invoice number (or same vendor, amount, and due date) as a logged record &mdash; but the file
+      itself differs (e.g. a mailed copy of an emailed bill). Attach each to its record, or open it if it's genuinely new.
+      <strong>Sorted by match strength, best first.</strong>
+    </div>
+    <form id="bulk-attach-form" method="POST" action="/review/triage/attach_selected"
+          onsubmit="var n=document.querySelectorAll('.dupsel:checked').length; if(!n){alert('Tick at least one row first.');return false;} return confirm('Attach ' + n + ' selected item(s) to their matched records as duplicate copies? Nothing is deleted, and nothing new is logged.');"></form>
+    <div style="padding:0 20px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button type="submit" form="bulk-attach-form" class="btn btn-success btn-sm" data-kk="triage-attach-selected">&#128206; Attach selected to their records</button>
+      <span style="font-size:.8rem;color:var(--mid);">Tick the rows you're sure about &mdash; each one attaches to its own matched record.</span>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th style="width:30px;"><input type="checkbox" title="Select all"
+              onclick="var on=this.checked;document.querySelectorAll('.dupsel').forEach(function(c){c.checked=on;});"
+              style="width:15px;height:15px;"></th>
+        <th>Queued file</th><th>Vendor</th><th>Amount</th><th>Matches</th><th style="width:260px;"></th></tr></thead>
+      <tbody>
+      {% for it in probable %}
+      <tr>
+        <td><input type="checkbox" class="dupsel" name="sids" value="{{ it.sid }}"
+                   form="bulk-attach-form" style="width:15px;height:15px;"
+                   title="Select for the bulk 'Attach selected' action"></td>
+        <td style="font-size:.83rem;">{{ (it.data.pdf_path or '').split('\\')[-1] }}</td>
+        <td>{{ it.data.vendor or '—' }}</td>
+        <td class="amount">{% if it.data.amount %}${{ "{:,.2f}".format(it.data.amount) }}{% else %}—{% endif %}</td>
+        <td>
+          {% for m in it.matches %}
+          <a href="/entry/{{ m.id }}/view" target="_blank" style="color:var(--blue);font-weight:600;">{{ m.record_no or '#' ~ m.id }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+          {% if it.cmp %}
+          <div style="font-size:.78rem;color:var(--mid);margin-top:2px;"><strong>{{ it.cmp.verdict.label }}</strong> &middot; {{ it.cmp.same }}/{{ it.cmp.compared }} match{% if it.cmp.diff_labels %} &middot; differs: {{ it.cmp.diff_labels|join(', ') }}{% endif %}</div>
+          {% endif %}
+        </td>
+        <td style="white-space:nowrap;">
+          <form method="POST" action="/review/{{ it.sid }}/attach/{{ it.matches[0].id }}" style="display:inline;margin:0;"
+                onsubmit="return confirm('Attach this file to record {{ it.matches[0].record_no or '#' ~ it.matches[0].id }} as a duplicate copy?')">
+            <button type="submit" class="btn btn-success btn-sm">&#128206; Attach to {{ it.matches[0].record_no or '#' ~ it.matches[0].id }}</button>
+          </form>
+          <a href="/review/{{ it.sid }}/compare/{{ it.matches[0].id }}" class="btn btn-ghost btn-sm" title="See both documents side by side with the important details boxed">&#128269; Compare</a>
+          <a href="/review/{{ it.sid }}" class="btn btn-ghost btn-sm">Review</a>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</div>
+{% endif %}
+
+{% if near_queue %}
+<div class="card" style="margin-bottom:20px;border-left:5px solid #F9A825;">
+  <div class="card-header" style="background:#F9A825;">&#128257; Same bill waiting more than once</div>
+  <div class="card-body" style="padding:0;">
+    <div style="padding:14px 20px;font-size:.9rem;color:var(--mid);">
+      These bills aren't logged yet, but the <em>same bill</em> (same vendor and invoice number, or same
+      vendor, amount, and due date) is sitting in the queue more than once &mdash; usually an email that
+      arrived several times, or an email plus its paper copy. Setting the repeats aside keeps the
+      <strong>earliest-received copy</strong> in the queue for review; the repeat files move to the
+      _Duplicates folder &mdash; <strong>nothing is deleted</strong>.
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Vendor</th><th>Amount</th><th>Due</th><th>Copies waiting</th><th style="width:260px;"></th></tr></thead>
+      <tbody>
+      {% for g in near_queue %}
+      <tr>
+        <td>{{ g.kept.data.vendor or '—' }}</td>
+        <td class="amount">{% if g.kept.data.amount %}${{ "{:,.2f}".format(g.kept.data.amount) }}{% else %}—{% endif %}</td>
+        <td>{{ g.kept.data.due_date or '—' }}</td>
+        <td style="font-size:.83rem;">{{ 1 + g.extras|length }}&times; &mdash;
+          {{ (g.kept.data.pdf_path or '').split('\\')[-1] }} <strong>(kept)</strong>{% for e in g.extras %},
+          {{ (e.data.pdf_path or '').split('\\')[-1] }}{% if e.cmp %}
+          <span style="color:var(--mid);">({% if e.cmp.diff_labels %}differs: {{ e.cmp.diff_labels|join(', ') }}{% else %}no meaningful differences{% endif %})</span>{% endif %}{% endfor %}</td>
+        <td style="white-space:nowrap;">
+          <form method="POST" action="/review/triage/set_aside_near/{{ g.kept.sid }}" style="display:inline;margin:0;"
+                onsubmit="return confirm('Set aside {{ g.extras|length }} repeat cop{{ 'ies' if g.extras|length != 1 else 'y' }} of this bill? The earliest copy stays in the queue; nothing is deleted.')">
+            <button type="submit" class="btn btn-success btn-sm">&#128257; Set aside {{ g.extras|length }} repeat{{ 's' if g.extras|length != 1 else '' }}</button>
+          </form>
+          <a href="/review/{{ g.kept.sid }}" class="btn btn-ghost btn-sm">Review</a>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</div>
+{% endif %}
+
+{% if not certain and not queue_dups and not probable and not near_queue %}
+<div class="alert alert-info">&#10003; No duplicates detected in Needs Review. Nice and clean.</div>
+{% endif %}
+{% endblock %}

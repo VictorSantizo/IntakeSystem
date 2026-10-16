@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klick Klack — Review: SoCal Edison</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="topbar">
+  <a class="wordmark" href="index.html">Klick Klack</a>
+  <nav>
+    <a href="index.html">Today</a>
+    <a href="review.html" class="here">Review</a>
+    <a href="pay.html">Pay</a>
+    <a href="find.html">Find</a>
+    <a href="#">The desk</a>
+  </nav>
+  <span class="who">Fri, Jul 31 · Karen</span>
+</div>
+<div class="wrap">
+
+  <div class="eyebrow">Review · 1 of 6</div>
+  <h1>SoCal Edison, TL222. <em>Looks right.</em></h1>
+  <p class="sub">The AI read the bill below — glance at the fields, fix anything off, then confirm. Hover a field to see where it sits on the page.</p>
+
+  <div class="doc-split">
+    <!-- the document itself (mock render of the scan) -->
+    <div class="doc-wrap">
+      <div class="doc-page-mock">
+        <div class="mock-head">Southern California Edison</div>
+        <div class="ln w60"></div><div class="ln w80"></div><div class="ln w40"></div>
+        <div style="margin:16px 0;padding:10px;border:1px solid #ece4dc;border-radius:4px;">
+          <div class="ln w70"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:12px;">
+            <span style="color:#999;">Amount due</span>
+            <b style="color:#3c3835;">$147.48</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;">
+            <span style="color:#999;">Due date</span>
+            <b style="color:#3c3835;">Aug 12, 2026</b>
+          </div>
+        </div>
+        <div class="ln w80"></div><div class="ln w60"></div><div class="ln w70"></div><div class="ln w40"></div>
+        <div class="stamp">RECEIVED JUL 29 2026</div>
+      </div>
+      <div style="font-size:.74rem;color:var(--ink-soft);margin-top:8px;">scanned paper · batch Jul 29 · page 1 of 1</div>
+    </div>
+
+    <!-- the AI's reading, as quiet field rows -->
+    <dl class="fields">
+      <dt>Vendor</dt><dd>SoCal Edison <span class="from-ai">AI · sure</span></dd>
+      <dt>Type</dt><dd>Bill — electricity (ELEC) <span class="from-ai">AI · sure</span></dd>
+      <dt>Amount</dt><dd>$147.48 <span class="from-ai">AI · sure</span></dd>
+      <dt>Due date</dt><dd>August 12, 2026 <span class="from-ai">AI · sure</span></dd>
+      <dt>Property</dt><dd>TL222 — TRUST2 <span class="from-ai">AI · sure</span></dd>
+      <dt>Account #</dt><dd>7-421-8890-13 <span class="from-ai">AI · sure</span></dd>
+      <dt>Received</dt><dd>July 29, 2026 — stamped <span class="from-ai">stamp read · sure</span></dd>
+      <dt>File as</dt><dd style="font-size:.86rem;">07-29-26 TRUST2 ELEC - SoCal Edison - $147.48 - TL222.pdf
+        <span style="display:block;color:var(--ink-soft);font-size:.78rem;margin-top:3px;">
+        2026 → ACCOUNTS PAYABLE - INCOMING BILLS → 07. JULY — same as last month's Edison bill</span></dd>
+    </dl>
+  </div>
+
+  <a class="next" href="#" id="confirm-btn">Confirm &amp; file
+    <small>Ctrl+Enter works too — then straight to the next one</small></a>
+
+  <!-- borrowed from mail_review: say exactly what happened, with undo -->
+  <div id="filed-feedback" style="display:none;margin-top:26px;padding:16px 20px;background:var(--cream);border-left:3px solid var(--sage);border-radius:0 6px 6px 0;">
+    <div style="font-weight:600;color:var(--sage);">Filed ✓</div>
+    <div style="font-size:.88rem;margin-top:3px;">07-29-26 TRUST2 ELEC - SoCal Edison - $147.48 - TL222.pdf</div>
+    <div style="font-size:.8rem;color:var(--ink-soft);margin-top:3px;">2026 → ACCOUNTS PAYABLE - INCOMING BILLS → 07. JULY · <a href="#">undo</a> · on to the next one…</div>
+  </div>
+
+  <div class="actions">
+    <a href="#">Fix a field</a>
+    <a href="#">It's a duplicate — attach to the existing record</a>
+    <a href="#">Set aside (recoverable)</a>
+    <a href="review.html">← back to the queue</a>
+  </div>
+
+</div>
+<script>
+  // demo: confirm shows the filed-as feedback, then moves on
+  document.getElementById('confirm-btn').addEventListener('click', function(e){
+    e.preventDefault();
+    this.style.display = 'none';
+    var fb = document.getElementById('filed-feedback');
+    fb.style.display = 'block';
+    setTimeout(function(){ window.location.href = 'review.html'; }, 1800);
+  });
+</script>
+</body>
+</html>

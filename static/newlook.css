@@ -1,0 +1,207 @@
+/* Klick Klack — the "new look" second view (2026-08-05).
+   Adapted from the ui-redesign-sample branch's site.css (the visual source of
+   truth). One palette, one accent, hairlines over cards.
+   The legacy variable names (--navy/--blue/...) are REMAPPED to this palette —
+   the shared widgets (_chrome_shared.html: helper, report modal, PDF viewer)
+   style themselves with those names, so they recolor here without forking. */
+:root{
+  --ink:#3c3835;
+  --ink-soft:#7a726b;
+  --paper:#faf6f3;
+  --cream:#f5ece5;
+  --line:#e7dcd2;
+  --accent:#bc773f;
+  --accent-deep:#9c4a2a;
+  --sage:#7a8b6f;
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:-apple-system,'Segoe UI',Arial,sans-serif;
+  /* legacy names consumed by the shared chrome */
+  --navy:#3c3835;
+  --blue:#bc773f;
+  --light-blue:#e7dcd2;
+  --pale:#f5ece5;
+  --green:#7a8b6f;
+  --orange:#bc773f;
+  --red:#9c4a2a;
+  --yellow:#e8c77b;
+  --gray:#f2ede8;
+  --dark:#3c3835;
+  --mid:#7a726b;
+  --white:#fff;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);
+     font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+a{color:var(--accent);}
+.wrap{max-width:880px;margin:0 auto;padding:28px 28px 80px;}
+
+/* ── quiet top bar: wordmark + word links, no navy slab ── */
+.topbar{display:flex;align-items:baseline;gap:20px;padding:14px 28px;
+        border-bottom:1px solid var(--line);max-width:1060px;margin:0 auto;flex-wrap:wrap;}
+.topbar .wordmark{font-family:var(--serif);font-size:1.15rem;color:var(--ink);
+                  text-decoration:none;margin-right:6px;}
+.topbar nav{display:flex;gap:18px;flex:1;flex-wrap:wrap;}
+.topbar nav a{color:var(--ink-soft);text-decoration:none;font-size:.92rem;}
+.topbar nav a:hover{color:var(--ink);text-decoration:underline;}
+.topbar nav a.here{color:var(--accent);font-weight:600;}
+.topbar .who{font-size:.8rem;color:var(--ink-soft);white-space:nowrap;}
+.topbar .badge{color:var(--accent);font-weight:600;font-size:.82rem;}
+.topbar .goto-form{margin:0;}
+.topbar .goto-form input{background:#fff;border:1px solid var(--line);border-radius:6px;
+       color:var(--ink);font-family:Consolas,Menlo,monospace;font-size:.82rem;
+       padding:4px 10px;width:110px;transition:width .15s;outline:none;}
+.topbar .goto-form input::placeholder{color:var(--ink-soft);font-family:var(--sans);}
+.topbar .goto-form input:focus{border-color:var(--accent);width:150px;}
+.who-links{display:flex;gap:14px;align-items:baseline;font-size:.8rem;white-space:nowrap;}
+.who-links a{color:var(--ink-soft);text-decoration:none;}
+.who-links a:hover{color:var(--ink);text-decoration:underline;}
+.who-links form{display:inline;margin:0;}
+button.linklike{background:none;border:none;padding:0;font:inherit;cursor:pointer;
+       color:var(--ink-soft);font-size:.8rem;}
+button.linklike:hover{color:var(--ink);text-decoration:underline;}
+/* Account menu (report #79) — the same <details> the classic chrome uses,
+   dressed for this look. Closing manners come from _chrome_page_js.html. */
+.usermenu{position:relative;}
+.usermenu>summary{list-style:none;cursor:pointer;color:var(--ink-soft);
+       display:inline-flex;align-items:center;gap:5px;}
+.usermenu>summary::-webkit-details-marker{display:none;}
+.usermenu>summary:hover,.usermenu[open]>summary{color:var(--ink);}
+.usermenu-caret{font-size:.7rem;}
+.usermenu-panel{position:absolute;right:0;top:24px;min-width:180px;background:#fff;
+       border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);
+       padding:6px 0;z-index:60;display:flex;flex-direction:column;}
+.usermenu-panel a,.usermenu-panel button.linklike{padding:8px 14px;text-align:left;
+       display:block;font-size:.85rem;width:100%;}
+.usermenu-panel a:hover,.usermenu-panel button.linklike:hover{background:var(--paper-2,#f6f4ef);}
+.usermenu-panel form{display:block;margin:0;}
+.usermenu-out{border-top:1px solid var(--line);margin-top:4px;padding-top:9px;}
+
+/* ── shared primitives ── */
+.eyebrow{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;
+         color:var(--accent);margin-bottom:10px;font-weight:600;}
+.eyebrow.muted{color:var(--ink-soft);}
+h1{font-family:var(--serif);font-weight:400;font-size:1.9rem;line-height:1.25;margin-bottom:6px;color:var(--ink);}
+h1 em{font-style:normal;color:var(--accent-deep);}
+.sub{color:var(--ink-soft);margin-bottom:30px;max-width:56ch;}
+.page-head{margin-bottom:8px;}
+
+/* hairline work rows */
+.rows{border-top:1px solid var(--line);}
+.row{display:flex;align-items:baseline;gap:18px;padding:14px 4px;
+     border-bottom:1px solid var(--line);text-decoration:none;color:inherit;}
+.row:hover{background:var(--cream);}
+.row .n{font-family:var(--serif);font-size:1.3rem;min-width:2.2ch;text-align:right;}
+.row.urgent .n{color:var(--accent-deep);}
+.row .what{flex:1;min-width:0;}
+.row .what b{font-weight:600;}
+.row .what .meta{display:block;font-size:.84rem;color:var(--ink-soft);margin-top:1px;}
+.row .go{font-size:.84rem;color:var(--accent);white-space:nowrap;font-weight:600;}
+.row:hover .go{text-decoration:underline;}
+.row .amt{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600;}
+.row .date{font-size:.82rem;color:var(--ink-soft);white-space:nowrap;min-width:74px;}
+
+/* the ONE filled button per page: the very next action */
+.next{display:inline-block;margin-top:26px;background:var(--accent);color:#fff;
+      padding:12px 22px;border-radius:6px;text-decoration:none;font-weight:600;font-size:.95rem;
+      border:none;cursor:pointer;font-family:var(--sans);}
+.next small{display:block;font-weight:400;font-size:.78rem;opacity:.85;margin-top:2px;}
+.next:hover{background:var(--accent-deep);}
+.next.plain{background:none;color:var(--accent);padding:12px 0;border-radius:0;}
+.next.plain:hover{text-decoration:underline;background:none;}
+
+/* word-level action row */
+.actions{margin-top:36px;display:flex;gap:26px;flex-wrap:wrap;}
+.actions a{color:var(--accent);text-decoration:none;font-weight:600;font-size:.93rem;}
+.actions a:hover{text-decoration:underline;}
+
+/* panels */
+.panel{margin-top:44px;}
+.panel h2,.section-label{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;
+      color:var(--ink-soft);font-weight:600;margin-bottom:12px;}
+.cream-box{margin-top:44px;background:var(--cream);border-radius:8px;padding:22px 26px;}
+
+/* quiet tables (inside details or reference panels) */
+table.quiet{width:100%;border-collapse:collapse;font-size:.87rem;}
+table.quiet th{text-align:left;font-weight:600;color:var(--ink-soft);padding:6px 8px;
+          border-bottom:1px solid var(--line);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;}
+table.quiet td{padding:8px;border-bottom:1px solid var(--line);}
+table.quiet td.num,table.quiet th.num{text-align:right;font-variant-numeric:tabular-nums;}
+table.quiet tr:last-child td{border-bottom:none;}
+table.quiet tr.clickable{cursor:pointer;}
+table.quiet tr.clickable:hover td{background:#fff;}
+
+details{margin-top:16px;}
+summary{cursor:pointer;font-size:.85rem;color:var(--accent);font-weight:600;}
+summary:hover{text-decoration:underline;}
+
+/* forms, kept plain */
+.field{margin-top:18px;}
+.field label{display:block;font-size:.8rem;color:var(--ink-soft);margin-bottom:5px;font-weight:600;}
+.field input,.field select,.field textarea{width:100%;padding:9px 12px;border:1px solid var(--line);
+       border-radius:6px;background:#fff;font-size:.95rem;font-family:var(--sans);color:var(--ink);outline:none;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);
+       box-shadow:0 0 0 2px rgba(188,119,63,.15);}
+.search-big{margin-top:8px;display:flex;gap:10px;}
+.search-big input{flex:1;padding:13px 16px;font-size:1.05rem;border:1px solid var(--line);
+       border-radius:8px;background:#fff;font-family:var(--sans);color:var(--ink);outline:none;}
+.search-big input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(188,119,63,.15);}
+
+/* tags — text-only, no pill fill unless severity */
+.t{font-size:.78rem;font-weight:600;min-width:70px;}
+.t.legal{color:var(--accent-deep);}
+.t.email{color:var(--accent);}
+.t.plain{color:var(--ink-soft);font-weight:400;}
+.conf{font-size:.8rem;white-space:nowrap;}
+.conf.high{color:var(--sage);font-weight:600;}
+.conf.med{color:var(--ink-soft);}
+.conf.low{color:var(--accent-deep);font-weight:600;}
+
+/* record-number chip: the one visual token kept from the old UI */
+.recno{font-family:Consolas,Menlo,monospace;background:var(--cream);color:var(--ink);
+       border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:.85em;
+       font-weight:600;white-space:nowrap;text-decoration:none;}
+a.recno:hover{background:var(--line);}
+.recno.copied{background:var(--sage);color:#fff;border-color:var(--sage);}
+
+/* all-clear */
+.all-clear{padding:34px 4px;border-bottom:1px solid var(--line);}
+.all-clear .big{font-family:var(--serif);font-size:1.5rem;color:var(--sage);margin-bottom:4px;}
+.all-clear .why{color:var(--ink-soft);font-size:.92rem;}
+
+/* proportion bar (cream-box stats) */
+.prop-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:14px;background:#e9ded4;}
+.prop-legend{display:flex;gap:20px;margin-top:10px;font-size:.78rem;color:var(--ink-soft);}
+.prop-legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;}
+
+footer.foot{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);
+       font-size:.78rem;color:var(--ink-soft);line-height:1.7;}
+footer.foot b{color:var(--ink);}
+
+/* ── support for the shared chrome widgets (report modal, PDF viewer, helper).
+   They use classic class names; give those quiet new-look equivalents. ── */
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;}
+.card-header{background:var(--ink);color:#fff;padding:12px 20px;border-radius:8px 8px 0 0;
+       font-weight:600;font-size:.95rem;font-family:var(--serif);}
+.card-body{padding:20px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border:none;border-radius:6px;
+     font-size:.9rem;font-weight:600;cursor:pointer;text-decoration:none;font-family:var(--sans);}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent-deep);}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent);}
+.btn-sm{padding:4px 12px;font-size:.8rem;}
+.alert{padding:14px 18px;border-radius:8px;margin-bottom:16px;font-size:.9rem;}
+.alert-info{background:var(--cream);color:var(--ink);border-left:4px solid var(--sage);}
+.alert-warning{background:#f7ead9;color:#6b3d1e;border-left:4px solid var(--accent-deep);}
+input,select,textarea{font-family:var(--sans);color:var(--ink);}
+
+/* issue-report chip (admin-only, shared behavior with classic) */
+.issue-chip{display:inline-block;font-size:.75rem;color:var(--ink-soft);background:var(--cream);
+       border:1px solid var(--line);border-radius:10px;padding:1px 10px;text-decoration:none;}
+
+@media(max-width:680px){
+  .topbar{flex-wrap:wrap;gap:12px;}
+  .topbar .who{display:none;}
+  h1{font-size:1.5rem;}
+  .wrap{padding:22px 16px 60px;}
+}

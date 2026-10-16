@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+{% from "_dup_compare.html" import dup_compare, dup_summary, source_badge %}
+{% from "_date_guard.html" import date_guard_box, date_guard_script %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  <div>
+    <h1 style="margin-bottom:2px;">Review Scanned Document</h1>
+    <span class="subtitle"><strong>{{ data.pdf_path.split('\\')[-1] }}</strong> &nbsp;&middot;&nbsp;
+      <span class="conf-{{ (data.ai_confidence or 'none').lower() }}">AI: {{ data.ai_confidence or 'None' }}</span>
+      &nbsp;&middot;&nbsp; {{ queue_pos }} of {{ queue_total }} in queue
+      {% if data.batch_number %}&nbsp;&middot;&nbsp; <span title="Scanning batch this file belongs to">&#128451; Batch {{ data.batch_number }}</span>{% endif %}
+    </span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    {% if prev_id %}
+      <a href="/review/{{ prev_id }}{{ filter_qs or '' }}" class="btn btn-ghost btn-sm">&larr; Prev</a>
+    {% else %}
+      <button class="btn btn-ghost btn-sm" disabled style="opacity:.35;cursor:default;">&larr; Prev</button>
+    {% endif %}
+    {% if next_id %}
+      <a href="/review/{{ next_id }}{{ filter_qs or '' }}" class="btn btn-ghost btn-sm">Next &rarr;</a>
+    {% else %}
+      <button class="btn btn-ghost btn-sm" disabled style="opacity:.35;cursor:default;">Next &rarr;</button>
+    {% endif %}
+    <a href="/review{{ filter_qs or '' }}" class="btn btn-ghost btn-sm">&#9776; Queue</a>
+    <form method="POST" action="/review/{{ scan_id }}/skip{{ filter_qs or '' }}" style="margin:0;" onsubmit="return confirm('Discard this item from the queue? The file is moved to a _Skipped folder (not deleted) and will not come back on its own.')">
+      <button type="submit" class="btn btn-sm" style="background:#c00;color:#fff;">&#128465; Discard</button>
+    </form>
+  </div>
+</div>
+
+{% if overdue %}
+<div class="alert" style="background:var(--red);color:#fff;margin-bottom:16px;font-weight:bold;">
+  &#9200; <strong>URGENT &mdash; this bill is already past due</strong> (due {{ data.due_date }}). Process it as a priority.
+</div>
+{% endif %}
+
+{% if dupes %}
+<div class="alert" style="background:#FDE8E8;color:var(--red);border-left:4px solid var(--red);margin-bottom:16px;">
+  &#9888;&#65039; <strong>Possible duplicate</strong> &mdash; this looks like {{ dupes|length }} bill{{ 's' if dupes|length != 1 else '' }} already logged:
+  {% for d in dupes %}<a href="/entry/{{ d.id }}/view" target="_blank" style="color:var(--red);font-weight:bold;">{{ d.record_no or '#' ~ d.id }} {{ d.vendor or '' }}{% if d.amount %} ${{ "{:,.2f}".format(d.amount) }}{% endif %}{% if d.invoice_number %} (inv {{ d.invoice_number }}){% endif %}</a>{% if not loop.last %},&nbsp; {% endif %}{% endfor %}.
+  <div style="margin-top:10px;">If it's the same bill, attach this copy instead of logging a new one:
+    {% for d in dupes %}
+    <form method="POST" action="/review/{{ scan_id }}/attach/{{ d.id }}{{ filter_qs or '' }}" style="display:inline;margin:0 6px;"
+          onsubmit="return confirm('Attach this scan to record {{ d.record_no or '#' ~ d.id }} as a duplicate copy? It will NOT create a new entry.')">
+      <button type="submit" class="btn btn-sm" style="background:#fff;color:var(--red);border:1.5px solid var(--red);">&#128206; Attach to {{ d.record_no or '#' ~ d.id }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% for d in dupes %}{% set cmp = dup_cmps and dup_cmps[d.id] %}{% if cmp %}
+  <details style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 12px;color:#333;"{% if loop.first %} open{% endif %}>
+    <summary style="cursor:pointer;color:var(--red);">Compare with {{ d.record_no or '#' ~ d.id }}: {{ dup_summary(cmp) }}</summary>
+    <div style="margin-top:8px;">{{ dup_compare(cmp, "This document", "Record " ~ (d.record_no or '#' ~ d.id), "/review/" ~ scan_id ~ "/compare/" ~ d.id ~ (filter_qs or '')) }}</div>
+  </details>
+  {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+
+<div style="position:sticky;top:16px;">
+  <div class="card">
+    <div class="card-header">&#128196; Document Preview &nbsp;{{ source_badge(data) }}
+      <span style="float:right;font-weight:normal;font-size:.75rem;opacity:.8;">&#128205; hover a field to find it in the document</span></div>
+    <div class="card-body" style="padding:0;height:80vh;">
+      <div id="doc-viewer" class="doc-viewer"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card"><div class="card-header">&#9989; Confirm &amp; Log Entry</div><div class="card-body">
+  {% if data.ai_confidence == 'None' %}<div class="alert alert-warning" style="margin-bottom:12px;">No API key configured &mdash; fields extracted by regex only. Please review carefully.</div>{% endif %}
+  <form id="confirm-form" method="POST" action="/review/{{ scan_id }}/confirm{{ filter_qs or '' }}">
+  {% if data.important %}
+  <div class="alert" style="background:#FFF4E0;border-left:4px solid var(--orange);color:#7A4A00;margin-bottom:14px;">
+    &#9873; <strong>The AI flagged this as important</strong>{% if data.important_reason %} &mdash; {{ data.important_reason }}{% endif %}
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.85rem;font-weight:600;color:#7A4A00;cursor:pointer;">
+      <input type="checkbox" name="important" value="1" checked style="width:16px;height:16px;">
+      Keep flagged after logging &mdash; it stays on the dashboard's needs-attention list until unflagged or filed
+    </label>
+    <input type="hidden" name="important_reason" value="{{ data.important_reason or '' }}">
+  </div>
+  {% endif %}
+  {% if data.email_from or data.email_subject or data.email_body %}
+  {# Source-email panel (report #8): who sent it, whose mail it was, and
+     reply/forward via the reviewer's own mail program — the app never sends.
+     Gated on the stored email itself, not mail_type: hand-filed pickups and
+     harvested records can carry an email too (#26). #}
+  <div style="background:var(--pale);border-left:4px solid var(--blue);border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:.85rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+      <strong style="color:var(--navy);">&#128231; Source email{% if data.email_account %} &mdash; arrived in <span style="text-decoration:underline;">{{ data.email_account }}</span>{% endif %}</strong>
+      <span style="display:flex;gap:6px;">
+        <a class="btn btn-ghost btn-sm" href="/review/{{ scan_id }}/packet.pdf" target="_blank" title="One printable PDF: this document with the email behind it — print it and pay off the paper (#55)">&#128424; Print with email</a>
+        <a class="btn btn-ghost btn-sm" href="{{ email_mailto(data, 'reply') }}" title="Opens your own mail program with a reply started">&#8617; Reply</a>
+        <a class="btn btn-ghost btn-sm" href="{{ email_mailto(data, 'forward') }}" title="Opens your own mail program with a forward started">&#8618; Forward</a>
+      </span>
+    </div>
+    <div><strong>From:</strong> {{ data.email_from or '—' }}</div>
+    <div><strong>To:</strong> {{ data.email_to or '—' }}</div>
+    <div><strong>Date:</strong> {{ data.email_date or '—' }}</div>
+    <div><strong>Subject:</strong> {{ data.email_subject or '—' }}</div>
+    {% if data.email_body %}
+    <details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--blue);font-weight:600;">View full email</summary>
+      <pre style="white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:.83rem;color:var(--dark);background:#fff;border:1px solid #d5e2ee;border-radius:6px;padding:10px;margin:8px 0 0;max-height:260px;overflow-y:auto;">{{ data.email_body }}</pre>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="form-grid">
+
+    <input type="hidden" name="batch_number" value="{{ data.batch_number or '' }}">
+
+    <div class="form-group"><label>Document Type *</label>
+      <select name="doc_type" id="doc_type" onchange="updateFormVisibility()">
+        {% for dt in doc_type_choices(data.doc_type) %}
+          <option value="{{ dt }}" {{ 'selected' if data.doc_type==dt else '' }}>{{ dt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" data-hl="vendor"><label>Vendor / Sender</label>
+      <input type="text" name="vendor" value="{{ data.vendor or '' }}" placeholder="Company or person name">
+    </div>
+
+    <div class="form-group" id="row-bill-type"><label>Bill Type Code</label>
+      <input type="text" id="bill_type_input" name="bill_type_code" list="bill_type_list"
+             value="{{ data.bill_type_code or '' }}" placeholder="Search or type a code…"
+             autocomplete="off" oninput="checkBillType()">
+      <datalist id="bill_type_list">
+        {% for bt in cfg.bill_types %}<option value="{{ bt.code }}">{{ bt.description }}</option>{% endfor %}
+      </datalist>
+      <div id="bill_type_add_row" style="display:none;margin-top:6px;">
+        <button type="button" class="btn btn-sm btn-success" onclick="addBillType()">
+          + Add &ldquo;<span id="bt_new_label"></span>&rdquo; as a new bill type</button>
+        <span id="bt_add_status" style="font-size:.8rem;color:var(--mid);margin-left:8px;"></span>
+      </div>
+    </div>
+    <div class="form-group" id="row-amount" data-hl="amount"><label>Amount ($)</label>
+      <input type="text" name="amount" value="{{ '{:.2f}'.format(data.amount) if data.amount else '' }}" placeholder="0.00">
+    </div>
+
+    {# Date Received lives in the MAIN grid, not "More details" — it is the one
+       field Karen verifies on every single document ("the most important thing
+       we have in paying the bills is the date we receive them", 2026-08-03;
+       reports #56/#49/#43). The chip under it says where the date came from,
+       and for email documents offers the email's own date as a one-click fix. #}
+    <div class="form-group" data-hl="received_date"><label>Date Received *</label>
+      <input type="date" name="date_received" id="received_date" value="{{ data.received_date or today }}" required
+             onchange="onDateChange('received_date', this.value)">
+      <div style="font-size:.75rem;margin-top:3px;line-height:1.5;">
+        {% if data.mail_type == 'Email' %}
+          {% if email_received_iso and data.received_date == email_received_iso %}
+            <span style="color:var(--green);">&#10003; matches the email&rsquo;s own date</span>
+          {% elif email_received_iso %}
+            <span style="color:#B26B00;">&#9888; the email itself says <strong>{{ email_received_iso }}</strong></span>
+            <button type="button" class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:.75rem;"
+                    onclick="document.getElementById('received_date').value='{{ email_received_iso }}';onDateChange('received_date','{{ email_received_iso }}')">Use email date</button>
+          {% else %}
+            <span style="color:#B26B00;">&#9888; email date unknown &mdash; verify by eye</span>
+          {% endif %}
+        {% elif data.stamped_received_date %}
+          <span style="color:var(--green);">&#10003; read from the received stamp on the document</span>
+        {% elif data.received_date_source == 'document' %}
+          <span style="color:#B26B00;">&#9888; backlog scan &mdash; from the date printed on the document; verify against the stamp</span>
+        {% elif data.received_date_source == 'file-date' %}
+          <span style="color:#B26B00;">&#9888; backlog scan &mdash; from the scan file&rsquo;s own date; check the stamp on the back</span>
+        {% elif data.received_date_assumed %}
+          <span style="color:var(--red);">&#9888; assumed from the scan date &mdash; check the stamp on the back</span>
+        {% elif data.batch_number %}
+          <span style="color:var(--mid);">from batch {{ data.batch_number }}&rsquo;s cover sheet</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="form-group" id="row-due-date" data-hl="due_date"><label>Due Date</label>
+      <input type="date" name="due_date" id="due_date" value="{{ data.due_date or '' }}">
+    </div>
+
+    {# "Already paid" (2026-08-03 session): most of Karen's backlog is bills she
+       paid by hand weeks ago — logging one used to take confirm, then hunting
+       the record down to Mark Paid. Bills only (#27). #}
+    <div class="form-group full" id="row-already-paid" style="display:none;">
+      <div style="background:#F0F7EC;border:1px solid #CBE3C6;border-radius:8px;padding:10px 12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-size:.9rem;">
+          <input type="checkbox" name="already_paid" value="1" style="width:16px;height:16px;"
+                 onchange="show('paid-fields', this.checked)">
+          &#9989; I already paid this bill &mdash; log it straight to <strong>Paid</strong>
+        </label>
+        <div id="paid-fields" style="display:none;">
+          <div class="form-grid" style="margin-top:10px;">
+            <div class="form-group"><label>Paid date</label>
+              <input type="date" name="paid_date" value="{{ today }}"></div>
+            <div class="form-group"><label>How</label>
+              <select name="paid_method" onchange="show('row-check-no', this.value==='Check')">
+                <option value="">&mdash;</option>
+                <option>Check</option><option>ACH</option>
+                <option>Credit Card</option><option>Phone</option>
+              </select></div>
+            <div class="form-group" id="row-check-no" style="display:none;"><label>Check #</label>
+              <input type="text" name="check_number" placeholder="e.g. 4417"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" id="row-entity"><label>Entity</label>
+      <select name="entity_code"><option value="">— Select —</option>{% for e in cfg.entities %}<option value="{{ e.code }}" {{ 'selected' if data.entity_code==e.code else '' }}>{{ e.code }} &ndash; {{ e.name }}</option>{% endfor %}</select>
+    </div>
+
+    <div class="form-group full" id="row-properties"><label>Properties (select all that apply)</label>
+      <input type="text" id="prop-search" placeholder="Filter properties…" oninput="filterProps(this.value)" style="margin-bottom:6px;">
+      <div id="prop-list" style="max-height:160px;overflow-y:auto;border:1px solid #ccc;border-radius:6px;padding:8px;background:#fff;display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+      {% for p in cfg.properties %}
+        <label style="display:flex;align-items:center;gap:6px;font-size:.83rem;font-weight:normal;cursor:pointer;padding:2px 4px;border-radius:4px;" class="prop-item">
+          <input type="checkbox" name="property_codes" value="{{ p.code }}"
+            {{ 'checked' if p.code in (data.property_codes or []) else '' }}
+            onchange="sortProps()">
+          <span><code>{{ p.code }}</code> {{ p.address[:40] }}</span>
+        </label>
+      {% endfor %}
+      </div>
+    </div>
+
+    {# Progressive disclosure: the fields above are what staff actually verify
+       against the document. These are prefilled metadata that's rarely wrong —
+       tucked away so the form isn't 13 equal-weight fields at first glance, but
+       one click away. Auto-expanded when the received date is a guess that
+       genuinely needs eyes on it. #}
+    <div class="form-group full">
+      <a href="#" id="more-details-toggle" onclick="toggleMoreDetails();return false;"
+         style="font-size:.85rem;color:var(--blue);text-decoration:none;font-weight:600;">&#9656; More details</a>
+    </div>
+    <div id="more-details" class="form-group full" style="display:none;">
+      <div class="form-grid">
+        <div class="form-group"><label>Scanned Date</label>
+          <input type="date" name="scanned_date" id="scanned_date" value="{{ data.scanned_date or today }}"
+                 onchange="onDateChange('scanned_date', this.value)">
+        </div>
+        <div class="form-group"><label>Mail Type</label>
+          <select name="mail_type">{% for mt in ['Physical Mail','Email','Fax','Courier'] %}<option value="{{ mt }}" {{ 'selected' if data.get('mail_type')==mt else '' }}>{{ mt }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-group" data-hl="invoice_number"><label>Invoice / Statement #</label>
+          <input type="text" name="invoice_number" value="{{ data.invoice_number or '' }}" placeholder="Unique to this bill">
+        </div>
+        <div class="form-group" data-hl="account_number"><label>Account #</label>
+          <input type="text" name="account_number" value="{{ data.account_number or '' }}" placeholder="Ongoing account number">
+        </div>
+        <div class="form-group full"><label>Notes</label><textarea name="notes">{{ data.notes or '' }}</textarea></div>
+      </div>
+    </div>
+
+    {# "File as" (reports #23/#18): where the document lands when confirmed —
+       filename in Karen's convention + a folder in her archive. Values left at
+       their suggestion re-derive from the FINAL field values at confirm
+       (confirm_item), so editing the vendor never files under a stale name. #}
+    {# Folder before filename, wide inputs, and a real folder browser —
+       Nancy's report #44. Paths render as UNC (house rule, #33/#36). #}
+    <div class="form-group full" style="background:var(--pale);border:1px solid var(--light-blue);border-radius:8px;padding:12px 14px;">
+      <label style="margin-bottom:6px;">&#128193; File as</label>
+      <input type="hidden" name="suggested_filed_name" value="{{ suggested_name or '' }}">
+      <input type="hidden" name="suggested_filed_dir" value="{{ filing_suggestion.dir|unc if filing_suggestion else '' }}">
+      <div style="display:grid;gap:8px;">
+        <div>
+          <div style="font-size:.75rem;color:var(--mid);margin-bottom:2px;">Folder
+            {% if filing_suggestion and filing_suggestion.source == 'history' %}<span style="color:var(--green);">&middot; where {{ data.vendor or 'this vendor' }} was filed before</span>
+            {% elif filing_suggestion and filing_suggestion.source == 'rule' %}<span style="color:var(--green);">&middot; incoming-bills folder for the received month</span>
+            {% elif filing_suggestion and filing_suggestion.source == 'hand-filed' %}<span style="color:var(--green);">&middot; where it was hand-filed &mdash; leave as-is to keep it there</span>{% endif %}
+          </div>
+          <div style="display:flex;gap:6px;">
+            <input type="text" name="filed_dir" id="filed-dir-input" list="filed-dir-options"
+                   value="{{ filing_suggestion.dir|unc if filing_suggestion else '' }}"
+                   style="flex:1;font-size:.85rem;font-family:Consolas,Menlo,monospace;">
+            <button type="button" class="btn btn-ghost btn-sm" data-kk="filed-dir-browse"
+                    onclick="openFolderPicker('filed-dir-input')">Browse&hellip;</button>
+          </div>
+          <datalist id="filed-dir-options">
+            {% if filing_suggestion %}{% for c in filing_suggestion.candidates %}<option value="{{ c|unc }}">{% endfor %}{% endif %}
+          </datalist>
+        </div>
+        <div>
+          <div style="font-size:.75rem;color:var(--mid);margin-bottom:2px;">Filename</div>
+          <input type="text" name="filed_name" value="{{ suggested_name or '' }}" style="width:100%;box-sizing:border-box;font-size:.85rem;">
+        </div>
+        <div style="font-size:.75rem;color:var(--mid);">Left as-is, both update automatically to match the fields above when you confirm. Edit either one to override.</div>
+      </div>
+    </div>
+    {% include "_folder_picker.html" %}
+
+    {{ date_guard_box() }}
+
+    <div class="form-group full" style="display:flex;gap:12px;margin-top:8px;align-items:center;">
+      <button type="submit" class="btn btn-success" data-kk="confirm-log-btn">&#9989; Confirm &amp; Log</button>
+      <span class="subtitle" style="margin:0;font-size:.78rem;">Tip: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to confirm &amp; next &nbsp;&middot;&nbsp; &#9776; Queue is up top</span>
+    </div>
+  </div></form>
+</div></div>
+</div>
+
+<script>
+const BILLING_TYPES = ['Bill', 'Income'];
+const SIMPLE_TYPES  = ['Correspondence', 'Other'];
+
+// Inline bill-type add (Tier 3 #20): if what's typed isn't a known code, offer to add it.
+const KNOWN_BILL_TYPES = new Set([{% for bt in cfg.bill_types %}"{{ bt.code|lower }}",{% endfor %}]);
+function checkBillType(){
+  var inp=document.getElementById('bill_type_input');
+  var row=document.getElementById('bill_type_add_row');
+  if(!inp||!row) return;
+  var val=(inp.value||'').trim();
+  if(val && !KNOWN_BILL_TYPES.has(val.toLowerCase())){
+    document.getElementById('bt_new_label').textContent=val;
+    row.style.display='';
+  } else { row.style.display='none'; }
+}
+function addBillType(){
+  var inp=document.getElementById('bill_type_input');
+  var val=(inp.value||'').trim();
+  if(!val) return;
+  var status=document.getElementById('bt_add_status');
+  status.textContent='Adding…';
+  fetch('/api/bill_types/add',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:val})})
+   .then(function(r){return r.json();}).then(function(d){
+     if(d.ok){
+       KNOWN_BILL_TYPES.add((d.code||val).toLowerCase());
+       var dl=document.getElementById('bill_type_list');
+       if(dl && !Array.from(dl.options).some(function(o){return o.value.toLowerCase()===d.code.toLowerCase();})){
+         var opt=document.createElement('option'); opt.value=d.code; opt.textContent=d.description||''; dl.appendChild(opt);
+       }
+       inp.value=d.code;
+       document.getElementById('bill_type_add_row').style.display='none';
+       status.textContent='';
+     } else { status.textContent=d.error||'Could not add.'; }
+   }).catch(function(){ status.textContent='Network error.'; });
+}
+
+function updateFormVisibility() {
+  const dt = document.getElementById('doc_type').value;
+  const isSimple  = SIMPLE_TYPES.includes(dt);
+  const hasBilling = BILLING_TYPES.includes(dt);
+
+  show('row-bill-type',   hasBilling);
+  show('row-amount',      hasBilling);
+  show('row-due-date',    hasBilling);
+  show('row-already-paid', dt === 'Bill');   // Mark Paid is bills-only (#27)
+  show('row-entity',      !isSimple);
+  show('row-properties',  !isSimple);
+}
+
+function show(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = visible ? '' : 'none';
+}
+
+function sortProps() {
+  const list = document.getElementById('prop-list');
+  const items = Array.from(list.querySelectorAll('.prop-item'));
+  items.sort((a, b) => {
+    const aChecked = a.querySelector('input').checked ? 0 : 1;
+    const bChecked = b.querySelector('input').checked ? 0 : 1;
+    return aChecked - bChecked;
+  });
+  items.forEach(el => list.appendChild(el));
+}
+
+function filterProps(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.prop-item').forEach(el => {
+    el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+// Run on load to set initial state
+updateFormVisibility();
+sortProps();
+
+// "More details" disclosure — collapsed by default (the fields inside are
+// prefilled metadata staff rarely need to touch), but forced open when the
+// received date is only a guess so that warning can't be missed.
+function toggleMoreDetails(open){
+  var box=document.getElementById('more-details');
+  var link=document.getElementById('more-details-toggle');
+  if(!box||!link) return;
+  var show = (open !== undefined) ? open : (box.style.display==='none');
+  box.style.display = show ? 'block' : 'none';
+  link.innerHTML = (show ? '&#9662; Hide details' : '&#9656; More details');
+}
+{# The assumed-date force-open is gone on purpose: Date Received now lives in
+   the main grid (always visible), with its provenance chip carrying the
+   warning instead. #}
+
+// Document viewer with hover-to-highlight (falls back to a plain PDF iframe
+// when the document has no text layer or can't be rendered as images).
+// Deferred: initDocViewer is defined in base.html's bottom script block,
+// which runs after this inline one.
+document.addEventListener('DOMContentLoaded', function(){
+  initDocViewer({viewer:'doc-viewer',
+                 hlUrl:'/review/{{ scan_id }}/highlights',
+                 pageUrl:'/review/{{ scan_id }}/page/',
+                 fallback:'/scan/preview/{{ scan_id }}'});
+});
+
+// Keyboard: Ctrl/Cmd+Enter = Confirm & Log (works from any field)
+document.addEventListener('keydown', function(e){
+  if((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.keyCode === 13)){
+    e.preventDefault();
+    var f = document.getElementById('confirm-form');
+    if (f) { if (f.requestSubmit) f.requestSubmit(); else f.submit(); }
+  }
+});
+
+// ── Received/scanned date override: offer to apply across the whole batch ──
+const SCAN_ID = {{ scan_id }};
+const BATCH_NO = {{ (data.batch_number or '')|tojson }};
+const BATCH_COUNT = {{ batch_count|default(1) }};   // queued files in this batch
+let _pendingDate = null;  // {field, value}
+
+function onDateChange(field, value){
+  if (BATCH_NO && BATCH_COUNT > 1){
+    _pendingDate = {field: field, value: value};
+    document.getElementById('bm-field').textContent =
+      (field === 'received_date' ? 'received date' : 'scanned date');
+    document.getElementById('bm-value').textContent = value;
+    document.getElementById('bm-batch').textContent = BATCH_NO;
+    document.getElementById('batch-modal').style.display = 'flex';
+  } else {
+    saveDate(field, value, 'file');  // no batch — just persist this file
+  }
+}
+
+function applyDate(scope){
+  document.getElementById('batch-modal').style.display = 'none';
+  if (_pendingDate) saveDate(_pendingDate.field, _pendingDate.value, scope);
+  _pendingDate = null;
+}
+
+function saveDate(field, value, scope){
+  const body = new URLSearchParams({field: field, value: value, scope: scope});
+  fetch('/review/' + SCAN_ID + '/set_date', {method:'POST', body: body})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok && scope === 'batch' && d.updated > 1){
+        const t = document.getElementById('batch-toast');
+        t.textContent = '✓ Applied to ' + d.updated + ' files in batch ' + d.batch;
+        t.style.display = 'block';
+        setTimeout(()=>{ t.style.display = 'none'; }, 3500);
+      }
+    })
+    .catch(()=>{});
+}
+</script>
+
+<div id="batch-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:22px 24px;max-width:440px;box-shadow:0 12px 40px rgba(0,0,0,.3);">
+    <div style="font-weight:bold;color:var(--navy);font-size:1.05rem;margin-bottom:8px;">&#128197; Apply this date to the whole batch?</div>
+    <p style="margin:0 0 16px;font-size:.9rem;color:var(--mid);">
+      Set the <strong id="bm-field"></strong> to <strong id="bm-value"></strong> for
+      <strong>all files in Batch #<span id="bm-batch"></span></strong>, or just this one file?
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="applyDate('file')">Just this file</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="applyDate('batch')">Apply to whole batch</button>
+    </div>
+  </div>
+</div>
+<div id="batch-toast" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 18px;border-radius:8px;z-index:1001;font-size:.88rem;box-shadow:0 6px 20px rgba(0,0,0,.25);"></div>
+
+{% if logged_entry %}
+{# What just happened (2026-08-03 session): confirm auto-advances here, and the
+   silent jump read as "did it save? where did it go?". Say it, with a way back. #}
+<div id="logged-toast" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--green,#2e7d32);color:#fff;padding:10px 18px;border-radius:8px;z-index:1002;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.25);text-align:center;">
+  &#9989; Logged <strong>{{ logged_entry.record_no or '#' ~ logged_entry.id }}</strong>
+  {%- if logged_entry.vendor %} &middot; {{ logged_entry.vendor }}{% endif %}
+  {%- if logged_entry.amount %} &middot; ${{ '{:,.2f}'.format(logged_entry.amount) }}{% endif %}
+  {%- if logged_entry.status == 'Paid' %} &middot; marked <strong>Paid</strong>{% endif %}
+  <a href="/entry/{{ logged_entry.id }}/view" style="color:#fff;text-decoration:underline;margin-left:10px;">Open it</a>
+  {% if logged_twins and logged_twins != '0' %}
+  <div style="font-size:.8rem;margin-top:4px;">&#9888; {{ logged_twins }} other open record{{ 's' if logged_twins != '1' else '' }} look{{ '' if logged_twins != '1' else 's' }} like the same bill &mdash; open the record to check.</div>
+  {% endif %}
+</div>
+<script>setTimeout(function(){ var t = document.getElementById('logged-toast'); if (t) t.style.display = 'none'; }, 9000);</script>
+{% endif %}
+
+{# Year-sanity guard: check the AI-read dates on load too (that's the incident
+   case). No kkDateGuardShown hook needed anymore — both guarded fields sit in
+   the always-visible main grid now. #}
+{{ date_guard_script('received_date', 'due_date', true) }}
+{% endblock %}

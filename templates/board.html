@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corkboard — Klick Klack</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+  <style>
+    :root{
+      --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+      --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+      --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+      --cork:#c49a6c; --cork-dark:#a87f52;
+      --red:#b03a2e; --blue-ink:#2e5aa8; --green:#2e6e3e;
+      --sticky:#f7e896; --sticky-edge:#d9c65a;
+      --aging:#faf3d9; --stale:#f3e9c0; --stale-fold:#e2d49e;
+      --brass:#c9a84c; --brass-dark:#96782a;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f;
+        --cork:#a37e51; --cork-dark:#87653c; }
+    }
+    :root[data-theme="dark"]{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f;
+      --cork:#a37e51; --cork-dark:#87653c; }
+    :root[data-theme="light"]{ --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+      --cork:#c49a6c; --cork-dark:#a87f52; }
+
+    body{ background:var(--room); color:var(--room-ink);
+      font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+    .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+    .mono{ font-family:Consolas,"Courier New",monospace; }
+    a{ color:inherit; }
+    a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+    @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+    /* ── nav ── */
+    .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+      gap:18px; padding:10px 22px; flex-wrap:wrap; }
+    .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+    .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+    .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+    .nav .tabs .off{ color:#aebad2; }
+    .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+    .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+
+    .context{ max-width:1180px; margin:14px auto 0; padding:0 20px;
+      font-size:.82rem; color:var(--room-ink-soft); display:flex; gap:14px; flex-wrap:wrap; }
+    .context b{ color:var(--room-ink); }
+
+    /* ── board header row ── */
+    .board-wrap{ max-width:1180px; margin:14px auto 26px; padding:0 20px; }
+    .board-tools{ display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
+    .board-tools .t-title{ font-family:Rockwell,"Rockwell Nova",Georgia,serif;
+      font-size:1.35rem; color:var(--room-ink); font-weight:700; }
+    .board-tools .t-sub{ font-size:.82rem; color:var(--room-ink-soft); }
+    .sweep{ margin-left:auto; background:var(--paper); border:2px solid var(--wood);
+      border-bottom-width:4px; color:var(--wood-dark); font-weight:700; font-size:.85rem;
+      padding:6px 14px; cursor:pointer; }
+    .sweep:hover{ background:#fff; }
+
+    /* ── the board ── */
+    .frame{ border:14px solid var(--wood); background:var(--cork); padding:22px 22px 14px; }
+    .pins{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+      gap:22px 18px; }
+
+    .note{ background:var(--paper); border:1px solid var(--paper-edge); color:var(--ink);
+      padding:26px 13px 10px; position:relative; font-size:.8rem; line-height:1.4; }
+    .pins > .note:nth-child(3n+1){ transform:rotate(-1.4deg); }
+    .pins > .note:nth-child(3n+2){ transform:rotate(1.1deg); }
+    .pins > .note:nth-child(3n){ transform:rotate(-0.5deg); }
+    .note.aging{ background:var(--aging); }
+    .note.stale{ background:var(--stale); }
+    .note.stale::after{ content:""; position:absolute; right:0; bottom:0;
+      border-style:solid; border-width:0 0 20px 20px;
+      border-color:transparent transparent var(--stale-fold) transparent; }
+
+    .pin{ position:absolute; top:8px; left:50%; transform:translateX(-50%);
+      width:15px; height:15px; border-radius:50%; }
+    .pin.ai{ background:var(--red); border:3px solid #7e2318; }
+    .pin.staff{ background:var(--blue-ink); border:3px solid #1d3c74; }
+
+    .flagline{ position:absolute; top:6px; left:10px; font-size:.66rem; font-weight:700; }
+    .flagline.ai{ color:var(--red); }
+    .flagline.staff{ color:var(--blue-ink); }
+    .age{ position:absolute; top:6px; right:10px; font-size:.66rem; color:var(--pencil); }
+
+    .n-label{ font-size:.72rem; color:var(--wood-dark); border-bottom:1px solid var(--paper-edge);
+      padding-bottom:4px; margin-bottom:5px; overflow-wrap:anywhere; }
+    .n-from{ font-weight:700; font-size:.86rem; }
+    .n-what{ color:var(--ink); margin-top:1px; }
+    .n-where{ color:var(--pencil); font-size:.72rem; margin-top:2px; }
+    .n-why{ margin-top:6px; padding-top:5px; border-top:1px dashed var(--paper-edge); }
+    .n-why.ai{ color:var(--red); }
+    .n-why.staff{ color:var(--blue-ink); font-size:.9rem; }
+
+    .clip{ display:flex; align-items:center; gap:6px; margin-top:6px; font-size:.72rem;
+      color:var(--wood-dark); }
+    .clip .clip-shape{ width:10px; height:22px; border:2px solid var(--wood);
+      border-radius:5px 5px 0 0; border-bottom:none; flex:none; }
+    .clip a{ text-decoration:underline; text-underline-offset:2px; }
+
+    .n-foot{ display:flex; align-items:center; gap:8px; margin-top:9px; }
+    .postmark{ border:2px solid var(--blue-ink); border-radius:50%; color:var(--blue-ink);
+      width:52px; height:52px; flex:none; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; font-size:.5rem; text-align:center;
+      line-height:1.25; transform:rotate(-8deg); opacity:.75; text-transform:uppercase;
+      letter-spacing:.04em; }
+    .postmark b{ font-size:.62rem; }
+    .n-actions{ margin-left:auto; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+    .n-actions a, .n-actions button{ background:none; border:1px solid var(--wood); color:var(--wood-dark);
+      font-size:.7rem; padding:2px 9px; cursor:pointer; text-decoration:none; }
+    .n-actions a:hover, .n-actions button:hover{ background:#fff; }
+    .done{ display:flex; align-items:center; gap:5px; font-size:.68rem; color:var(--pencil); }
+    .done input{ accent-color: var(--green); }
+
+    .board-sticky{ background:var(--sticky); border-bottom:4px solid var(--sticky-edge);
+      color:#4a3d0c; padding:12px 13px; font-size:.92rem; line-height:1.45;
+      transform:rotate(1.8deg); align-self:start; }
+
+    .plaque{ margin:20px auto 0; width:fit-content; max-width:100%;
+      background:var(--brass); border:2px solid var(--brass-dark); color:#3d2f05;
+      font-size:.8rem; font-weight:700; padding:5px 22px; letter-spacing:.03em; }
+
+    /* ── tray under the board ── */
+    .tray{ max-width:1180px; margin:0 auto 26px; padding:0 20px; }
+    .tray-inner{ border:2px solid var(--wood); border-top-width:8px; background:var(--paper);
+      color:var(--ink); padding:10px 18px; font-size:.84rem; }
+    .tray-inner b{ color:var(--wood-dark); }
+    .tray-inner .why{ color:var(--pencil); font-size:.78rem; display:block; margin-top:4px; margin-bottom:8px; }
+    .tray-list{ list-style:none; margin:0; padding:0; }
+    .tray-list li{ font-size:.84rem; padding:4px 0; }
+    .tray-list a{ text-decoration:underline; text-underline-offset:3px;
+      color:var(--wood-dark); font-weight:600; }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <span class="tabs">
+    <a class="sib" href="/desk">the desk</a>
+    <a class="sib" href="/cabinet">file cabinet</a>
+    <a class="sib" href="/rolodex">rolodex</a>
+    <a class="sib" href="/intray">in-tray</a>
+    <a class="sib" href="/calendar">wall calendar</a>
+    <span class="on">corkboard</span>
+    <a class="sib" href="/tray">tray gauge</a>
+  </span>
+</nav>
+
+<div class="context">
+  <span>Flagged and important correspondence, pinned until someone takes it down. Taking down files nothing and deletes nothing — it just records handled.</span>
+</div>
+
+{% if pinned_count == 0 %}
+  <div class="board-wrap">
+    <div class="frame">
+      <div class="pins">
+        <div class="board-sticky hand">nothing needs attention — all clear.</div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <form method="POST" action="/board/sweep">
+    <input type="hidden" name="csrf_token" value="{{ session['csrf'] }}">
+
+    <div class="board-wrap">
+      <div class="board-tools">
+        <span class="t-title">Needs attention</span>
+        <span class="t-sub">red pin = the AI flagged it · blue pin = Karen flagged it · the paper yellows the longer it hangs</span>
+        <button class="sweep" type="submit">✓ take down marked done</button>
+      </div>
+
+      <div class="frame">
+        <div class="pins">
+          {% for it in pinned %}
+            <div class="note {% if it.tint %}{{ it.tint }}{% endif %}">
+              <span class="pin {{ it.pin }}"></span>
+              <span class="flagline {{ it.pin }}">{{ it.flagline }}</span>
+              <span class="age">up {{ it.age_days }} day{% if it.age_days != 1 %}s{% endif %}</span>
+              <div class="n-label mono">{{ it.label }}</div>
+              <div class="n-from">{{ it.vendor or it.doc_type }}</div>
+              {% if it.entity_code or it.property_code %}
+              <div class="n-where"><span class="mono">{{ it.entity_code or '' }}{% if it.entity_code and it.property_code %}·{% endif %}{{ it.property_code or '' }}</span></div>
+              {% endif %}
+              {% if it.is_clip %}
+                <div class="clip">
+                  <span class="clip-shape"></span>
+                  <span>{{ it.clip_text or "arrived clipped to a bill" }}</span>
+                </div>
+              {% endif %}
+              <div class="n-why {% if it.pin == 'ai' %}ai{% else %}staff hand{% endif %}">{{ it.why }}</div>
+              <div class="n-foot">
+                <span class="postmark">received<b>{{ it.received_label }}</b>{% if it.batch_number %}batch {{ it.batch_number }}{% endif %}</span>
+                <span class="n-actions">
+                  <a href="/entry/{{ it.id }}/view">open</a>
+                  <button type="submit" formaction="/board/{{ it.id }}/takedown">take down ✓</button>
+                  <span class="done"><input type="checkbox" name="ids" value="{{ it.id }}"> done</span>
+                </span>
+              </div>
+            </div>
+          {% endfor %}
+
+          {% if oldest_days >= 8 %}
+            <div class="board-sticky hand">the oldest paper here has been up {{ oldest_days }} days — these usually come down within a week.</div>
+          {% endif %}
+        </div>
+
+        <div class="plaque">{{ pinned_count }} pinned · {{ taken_down_week }} taken down this past week · oldest has hung {{ oldest_days }} days</div>
+      </div>
+    </div>
+  </form>
+{% endif %}
+
+{% if tray %}
+  <div class="tray">
+    <div class="tray-inner">
+      <b>In the tray under the board: {{ tray|length }} older item{% if tray|length != 1 %}s{% endif %}</b>
+      <span class="why">The board holds 12 at most — beyond that, the oldest slide into this tray (never deleted, never off the count) · oldest in the tray went up {{ tray_oldest }} days ago</span>
+    </div>
+    {% if tray %}
+      <div class="tray-inner">
+        <ul class="tray-list">
+          {% for item in tray %}
+            <li><span class="mono">{{ item.label }}</span> — up {{ item.age_days }} day{% if item.age_days != 1 %}s{% endif %} · <a href="/entry/{{ item.id }}/view">open</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+</body>
+</html>

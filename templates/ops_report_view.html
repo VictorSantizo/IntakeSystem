@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+  <h1 style="margin:0;">{{ meta.title }}</h1>
+  <span style="color:var(--mid);font-size:.85rem;">generated {{ stamp }} &middot; {{ ago }}</span>
+  <span style="flex:1;"></span>
+  <a class="btn btn-ghost btn-sm" href="/ops-reports">&larr; All ops reports</a>
+  <a class="btn btn-ghost btn-sm" href="/ops-reports/raw/{{ name }}" target="_blank" title="The report alone, in its own tab">Open full screen</a>
+</div>
+{% if is_html %}
+<iframe src="/ops-reports/raw/{{ name }}" title="{{ meta.title }}"
+        style="width:100%;height:calc(100vh - 170px);min-height:420px;border:1px solid #ddd;border-radius:8px;background:#fff;"></iframe>
+{% else %}
+<pre style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px 16px;font-size:.8rem;overflow:auto;max-height:calc(100vh - 170px);white-space:pre-wrap;">{{ text }}</pre>
+{% endif %}
+{% endblock %}

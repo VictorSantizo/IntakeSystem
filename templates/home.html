@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+{# Karen's landing — deliberately standalone (no base.html): no nav bar, no
+   badges, no numbers. Two cards and one way out. Normally one question +
+   one task; ?three=1 is the 2026-07-30 comparison view (three of each).
+   The one exception to "no chrome": the Classy/Colorful switch in the top
+   right (Karen, 2026-08-11 — "always visible" has to include HER landing
+   page). _skin_switch.html bakes in its own csrf_token, so the standalone-
+   template CSRF caveat is handled; any OTHER POST form added here still
+   needs a manual csrf_token hidden input (see rolodex.html). #}
+<style>
+  :root { --navy:#1F3864; --blue:#2E75B6; --pale:#DEEAF1; --green:#375623;
+          --orange:#ED7D31; --mid:#666; --dark:#333; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; background:#f0f2f5; color:var(--dark); min-height:100vh; }
+  .wrap { max-width:660px; margin:0 auto; padding:36px 20px 48px; }
+  .brand { color:var(--navy); font-weight:bold; font-size:1rem; letter-spacing:.5px; opacity:.75; }
+  h1 { color:var(--navy); font-size:1.9rem; margin:18px 0 2px; }
+  .date { color:var(--mid); font-size:1.05rem; margin-bottom:30px; }
+  .card { background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.08);
+          padding:26px 28px; margin-bottom:22px; }
+  .card .label { font-size:.85rem; font-weight:bold; letter-spacing:1.2px;
+                 text-transform:uppercase; margin-bottom:12px; }
+  .card.qcard { border-left:6px solid var(--orange); }
+  .qcard .label { color:var(--orange); }
+  .card.tcard { border-left:6px solid var(--blue); }
+  .tcard .label { color:var(--blue); }
+  .card .big { font-size:1.3rem; line-height:1.5; color:var(--dark); }
+  .card .note { color:var(--mid); font-size:1rem; margin-top:10px; }
+  .btn { display:inline-block; margin-top:20px; padding:15px 34px; border-radius:9px;
+         font-size:1.15rem; font-weight:bold; text-decoration:none; color:#fff;
+         background:var(--blue); }
+  .btn:hover { opacity:.9; }
+  .qcard .btn { background:var(--orange); }
+  .quiet { background:none; box-shadow:none; border:1.5px dashed #c9d4de;
+           padding:16px 22px; color:var(--mid); font-size:1.05rem; }
+  .quiet .tick { color:var(--green); font-weight:bold; }
+  #all-clear { text-align:center; padding:52px 28px; }
+  #all-clear .big { font-size:1.5rem; color:var(--navy); }
+  #all-clear .cheer { font-size:2.6rem; display:block; margin-bottom:14px; }
+  .more { text-align:center; margin-top:34px; }
+  .more a { display:inline-block; padding:12px 26px; border:1.5px solid var(--blue);
+            border-radius:9px; color:var(--blue); font-size:1rem; font-weight:bold;
+            text-decoration:none; background:#fff; }
+  .more a:hover { background:var(--pale); }
+  .signout { display:block; text-align:center; margin-top:22px; color:#9aa4ad;
+             font-size:.85rem; text-decoration:none; }
+  .signout:hover { color:var(--mid); }
+  .corner-switch { position:fixed; top:12px; right:16px; }
+  .corner-switch .skin-flip button { color:var(--mid); }
+</style>
+</head>
+<body>
+<div class="corner-switch">{% include "_skin_switch.html" %}</div>
+<div class="wrap">
+  <div class="brand">&#127968; Klick Klack</div>
+  <h1>{{ greeting }}{{ ", " + user if user else "" }}.</h1>
+  <div class="date">{{ today }}</div>
+
+  {% if not questions and not tasks %}
+    <div class="card" id="all-clear">
+      <span class="cheer">&#127881;</span>
+      <div class="big">All caught up!</div>
+      <div class="note">No questions to answer, nothing to pay, nothing waiting
+        to be checked in. Enjoy it.</div>
+    </div>
+  {% else %}
+
+    {% for q in questions %}
+      <div class="card qcard"{% if loop.first %} id="question-card"{% endif %}>
+        {% if loop.first %}
+          <div class="label">{{ "One question for you" if questions|length == 1
+                                else "Questions for you" }}</div>
+        {% endif %}
+        <div class="big">{{ q.text }}</div>
+        {% if q.note %}<div class="note">{{ q.note }}</div>{% endif %}
+        <a class="btn" href="{{ q.url }}">{{ q.button }} &rarr;</a>
+      </div>
+    {% else %}
+      <div class="card quiet" id="question-empty">
+        <span class="tick">&#10003;</span> No questions today &mdash; nothing needs
+        your decision.
+      </div>
+    {% endfor %}
+
+    {% for t in tasks %}
+      <div class="card tcard"{% if loop.first %} id="task-card"{% endif %}>
+        {% if loop.first %}
+          <div class="label">{{ "One thing to get done" if tasks|length == 1
+                                else "Things to get done" }}</div>
+        {% endif %}
+        <div class="big">{{ t.text }}</div>
+        {% if t.note %}<div class="note">{{ t.note }}</div>{% endif %}
+        <a class="btn" href="{{ t.url }}">{{ t.button }} &rarr;</a>
+      </div>
+    {% else %}
+      <div class="card quiet" id="task-empty">
+        <span class="tick">&#10003;</span> Nothing to pay and nothing waiting to be
+        checked in. The question above is the whole to-do list.
+      </div>
+    {% endfor %}
+
+  {% endif %}
+
+  <div class="more"><a href="/?full=1">Show me everything &rarr;</a></div>
+  <a class="signout" href="/logout">Sign out</a>
+</div>
+</body>
+</html>

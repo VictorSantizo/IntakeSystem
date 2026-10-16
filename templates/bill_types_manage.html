@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1>&#128179; Bill Types</h1>
+  <a href="/settings" class="btn btn-ghost btn-sm">&larr; Settings</a>
+</div>
+<p class="subtitle">Add, edit, or remove bill types (e.g. Painting). Changes take effect immediately. Renaming a <strong>code</strong> updates every record that uses it.</p>
+
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+{% if err %}<div class="alert alert-warning">&#9888;&#65039; {{ err }}</div>{% endif %}
+
+{% macro cat_options(selected) %}
+  {% for cat in categories %}<option value="{{ cat }}" {{ 'selected' if selected == cat else '' }}>{{ cat }}</option>{% endfor %}
+{% endmacro %}
+
+<div class="card" style="max-width:820px;margin-bottom:20px;"><div class="card-header">Add Bill Type</div><div class="card-body">
+  <form method="POST" action="/settings/bill_types/add" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="form-group" style="flex:0 0 130px;"><label>Code *</label><input type="text" name="code" placeholder="PAINT" required></div>
+    <div class="form-group" style="flex:1;min-width:200px;"><label>Description *</label><input type="text" name="description" placeholder="Painting" required></div>
+    <div class="form-group" style="flex:0 0 150px;"><label>Category</label><select name="category">{{ cat_options('Bill') }}</select></div>
+    <button type="submit" class="btn btn-primary">+ Add</button>
+  </form>
+</div></div>
+
+<div class="card" style="max-width:820px;"><div class="card-header">Existing Bill Types ({{ cfg.bill_types|length }})</div>
+<div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+  <thead><tr><th>Code</th><th>Description</th><th>Category</th><th style="width:140px;"></th></tr></thead>
+  <tbody>
+  {% for b in cfg.bill_types %}
+  <tr>
+    <td colspan="4" style="padding:0;">
+      <form method="POST" action="/settings/bill_types/{{ b.code }}/update" style="display:flex;gap:8px;align-items:center;margin:0;padding:6px 12px;">
+        <input type="text" name="code" value="{{ b.code }}" style="flex:0 0 120px;" required title="Code">
+        <input type="text" name="description" value="{{ b.description }}" style="flex:1;min-width:200px;" required title="Description">
+        <select name="category" style="flex:0 0 140px;">{{ cat_options(b.category) }}</select>
+        <button type="submit" class="btn btn-ghost btn-sm">Save</button>
+        <button type="submit" formaction="/settings/bill_types/{{ b.code }}/delete" class="btn btn-sm" style="background:#c00;color:#fff;"
+                formnovalidate data-billtype-code="{{ b.code }}"
+                onclick="return confirm('Delete bill type ' + this.dataset.billtypeCode + '? Records already using it keep the code.')">&#128465;</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="4" style="text-align:center;padding:30px;color:#999;">No bill types yet.</td></tr>{% endfor %}
+  </tbody></table></div></div></div>
+{% endblock %}

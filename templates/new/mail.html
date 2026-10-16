@@ -1,0 +1,91 @@
+{% extends "new/base.html" %}
+{% block content %}
+{# The new-look Mail page (Joshua, 2026-08-10: "give it the new design
+   template, like my dashboard"). Same data and controls as the classic
+   templates/mail.html — search and filters carrying each other's state both
+   ways — dressed in the calmer new-look shapes (table.quiet, eyebrow/sub,
+   no card chrome). newlook.css has no form styling yet, so the few inputs
+   here carry their own quiet inline style. #}
+<div class="eyebrow">Mail &middot; every office inbox in one place</div>
+<h1>All the mail, whoever it came to.</h1>
+<p class="sub">Search every mailbox at once, narrow to one inbox, and open any
+email to print it with its attachment list. Reading here never touches the
+real inboxes &mdash; nothing is marked read, moved, or deleted.</p>
+
+{% set inp = "border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;font:inherit;color:var(--ink);" %}
+<form method="GET" action="/mail" role="search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+  <input type="search" name="q" value="{{ q or '' }}" style="{{ inp }}flex:1;min-width:260px;"
+         placeholder="Search all mail — sender, subject, message text, attachment filename&hellip;">
+  {% for k, v in filters.items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+  <button type="submit" class="next plain" style="margin-top:0;">Search &rarr;</button>
+</form>
+
+<form method="GET" action="/mail" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px;font-size:.87rem;">
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <select name="account" style="{{ inp }}"><option value="">All mailboxes</option>{% for a in accounts %}<option value="{{ a }}" {{ 'selected' if filters.account==a else '' }}>{{ a }}</option>{% endfor %}</select>
+  <select name="doc_type" style="{{ inp }}"><option value="">Any document type</option>{% for dt in doc_types %}<option value="{{ dt }}" {{ 'selected' if filters.doc_type==dt else '' }}>{{ dt }}</option>{% endfor %}</select>
+  <input type="date" name="date_from" value="{{ filters.date_from }}" style="{{ inp }}" title="Received on or after">
+  <input type="date" name="date_to" value="{{ filters.date_to }}" style="{{ inp }}" title="Received on or before">
+  <select name="has_att" style="{{ inp }}"><option value="">With or without attachments</option><option value="yes" {{ 'selected' if filters.has_att=='yes' else '' }}>With attachments</option><option value="no" {{ 'selected' if filters.has_att=='no' else '' }}>Without</option></select>
+  <button type="submit" class="linklike" style="color:var(--accent);font-weight:600;">Filter</button>
+  <a href="/mail{% if q %}?q={{ q|urlencode }}{% endif %}" class="linklike" style="text-decoration:none;color:var(--ink-soft);">Clear</a>
+  <span style="flex:1;"></span>
+  {% if syncing %}
+  <span style="color:var(--ink-soft);">&#8987; syncing mailboxes&hellip;</span>
+  {% else %}
+  {# form= points at the standalone POST form below — a form can't nest inside
+     this filter form, and a nested one would silently submit the wrong way. #}
+  <button type="submit" form="mail-sync-form" class="linklike" data-kk="mail-sync" style="color:var(--accent);font-weight:600;"
+          title="Pull anything new from all mailboxes — read-only, nothing is ever marked read">&#8635; Sync mailboxes</button>
+  {% endif %}
+</form>
+{% if not syncing %}<form id="mail-sync-form" method="POST" action="/mail/sync" style="display:none;"></form>{% endif %}
+
+{% if sha %}
+<p style="font-size:.85rem;color:var(--ink-soft);margin-bottom:4px;" data-kk="mail-sha-filter">
+  Only the <b style="color:var(--ink);">{{ messages|length }}</b> email{{ 's' if messages|length != 1 }} carrying
+  <b style="color:var(--ink);">{{ sha_file or 'this exact attachment' }}</b> (byte-identical copies, every mailbox)
+  &mdash; <a href="/mail" style="color:var(--accent);">show all mail</a></p>
+{% endif %}
+
+{% if q and filters_on %}
+<p style="font-size:.85rem;color:var(--ink-soft);margin-bottom:4px;" data-kk="mail-filters-on">
+  Still narrowed by: {% for k, v in filters_on.items() %}<b style="color:var(--ink);">{{ v }}</b>{{ ' · ' if not loop.last }}{% endfor %}
+  &mdash; <a href="/mail?q={{ q|urlencode }}" style="color:var(--accent);">search all mailboxes instead</a></p>
+{% endif %}
+
+{% if status.total == 0 %}
+<div class="all-clear" style="margin-top:26px;">
+  <div class="big">The mail archive is empty.</div>
+  <div class="why">Click <b>Sync mailboxes</b> above to pull a local copy of every email from
+  every configured inbox. Look-don&rsquo;t-touch: the real mailboxes stay exactly as they are.</div>
+</div>
+{% else %}
+<div class="panel" style="margin-top:26px;">
+  <div class="section-label">{{ messages|length }} shown &middot; {{ status.total }} archived
+    ({% for a, n in status.by_account.items() %}{{ a }} {{ n }}{{ ' · ' if not loop.last }}{% endfor %})
+    {% if messages|length == 300 %} &middot; newest 300 — search or filter to narrow{% endif %}</div>
+  <table class="quiet">
+    <tr><th>Received</th><th>Mailbox</th><th>From</th><th>Subject</th><th class="num">&#128206;</th><th>Documents</th></tr>
+    {% for m in messages %}
+    <tr class="clickable" onclick="window.location.href='/mail/{{ m.id }}?back={{ qs|urlencode }}'" title="Open this email">
+      <td style="white-space:nowrap;color:var(--ink-soft);">{{ m.date_iso or '—' }}</td>
+      <td style="white-space:nowrap;"><span style="background:{{ acct_colors.get(m.account_name, '#546E7A') }};color:#fff;border-radius:10px;padding:1px 10px;font-size:.74rem;">{{ m.account_name or '?' }}</span></td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ m.from_addr or '—' }}</td>
+      <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;">
+        {%- if m.flagged %}<span style="color:var(--accent-deep);" title="{{ m.flagged_reason }}">&#9873;</span> {% endif -%}
+        {%- if m.resend and m.resend > 1 %}<a href="/mail?sha={{ m.resend_sha }}" onclick="event.stopPropagation()" style="background:var(--accent-deep);color:#fff;border-radius:10px;padding:1px 8px;font-size:.7rem;text-decoration:none;" title="An attachment on this email has arrived under {{ m.resend }} separate emails — click to see exactly those emails">&#8635;&#215;{{ m.resend }}</a> {% endif -%}
+        {{ m.subject or '(no subject)' }}</td>
+      <td class="num" title="{% for a in m.attachments %}{{ a.filename }}{{ ', ' if not loop.last }}{% endfor %}">{{ m.attachment_count or '' }}</td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap;">
+        {% for r in m.records[:3] %}<a class="recno" href="/entry/{{ r.entry_id }}/view" title="{{ r.vendor }} — {{ r.doc_type }}">{{ r.record_no }}</a> {% endfor %}
+        {%- if m.records|length > 3 %}<span style="color:var(--ink-soft);">+{{ m.records|length - 3 }}</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:30px;">No emails match{% if q %} &ldquo;{{ q }}&rdquo;{% endif %}{% if filters_on %} with these filters{% endif %}.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

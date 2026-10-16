@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+  <h1>&#128181; Packet vs Record</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="/paid-backfill?year={{ year }}&disp={{ disp }}" class="btn btn-ghost btn-sm">&larr; Back to list</a>
+    {% if prev_idx is not none %}<a href="/paid-backfill/item/{{ prev_idx }}?year={{ year }}&disp={{ disp }}" class="btn btn-ghost btn-sm">&larr; Prev</a>{% endif %}
+    <span style="font-size:.8rem;color:var(--mid);white-space:nowrap;">{{ pos }} of {{ total }} {{ disp }}</span>
+    {% if next_idx is not none %}<a href="/paid-backfill/item/{{ next_idx }}?year={{ year }}&disp={{ disp }}" class="btn btn-ghost btn-sm">Next &rarr;</a>{% endif %}
+    {% if entry %}<a href="/entry/{{ entry.id }}/view" target="_blank" class="btn btn-ghost btn-sm">Open record {{ entry.record_no or '#' ~ entry.id }}</a>{% endif %}
+  </div>
+</div>
+<p class="subtitle" style="margin-bottom:8px;">{{ row.reason }}</p>
+
+{% if decidable %}
+<form method="POST" action="/paid-backfill/decide/{{ idx }}?year={{ year }}&disp={{ disp }}"
+      style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--white);border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:10px 14px;margin-bottom:14px;">
+  {% if entry %}
+  <button type="submit" name="verdict" value="attach" class="btn btn-success btn-sm">
+    &#128206; Same bill &mdash; attach to {{ entry.record_no or '#' ~ entry.id }}{% if entry.status != 'Paid' %} + mark Paid{% endif %}</button>
+  {% endif %}
+  <button type="submit" name="verdict" value="create" class="btn btn-primary btn-sm">&#127381; Different &mdash; its own record (already Paid)</button>
+  <button type="submit" name="verdict" value="skip" class="btn btn-ghost btn-sm">&#9193; Skip / not sure</button>
+  <input type="text" name="note" placeholder="note (optional)" style="flex:1;min-width:160px;padding:5px 8px;font-size:.85rem;">
+  {% if decision %}
+  <span style="background:#E8F5E9;color:#2E7D32;border-radius:10px;padding:3px 10px;font-size:.8rem;font-weight:bold;white-space:nowrap;">
+    decided: {{ decision.verdict }}{% if decision.note %} &mdash; &ldquo;{{ decision.note }}&rdquo;{% endif %} ({{ decision.decided_by }})</span>
+  {% endif %}
+</form>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+  <div class="card">
+    <div class="card-header">&#128193; The packet (in the archive)
+      <span style="float:right;font-weight:normal;font-size:.75rem;opacity:.85;">{{ row.basename }}</span></div>
+    <div style="padding:6px 12px;border-bottom:1px solid #eee;font-size:.72rem;font-family:Consolas,monospace;color:var(--mid);word-break:break-all;">
+      {{ row.unc_path }}
+      <button type="button" class="btn btn-ghost btn-sm" style="font-family:inherit;" data-copy-path="{{ row.unc_path }}">Copy path</button>
+    </div>
+    <div class="card-body" style="padding:0;height:72vh;">
+      {% if doc_ok %}
+      <iframe src="/paid-backfill/doc/{{ idx }}?year={{ year }}" style="width:100%;height:100%;border:none;background:#fff;"></iframe>
+      {% else %}
+      <div style="padding:40px;text-align:center;color:var(--mid);">The file could not be opened from the archive &mdash; it may have been moved. Use the path above in File Explorer.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    {% if entry %}
+    <div class="card-header">&#128451; Record {{ entry.record_no or '#' ~ entry.id }} ({{ entry.status }})
+      <span style="float:right;font-weight:normal;font-size:.75rem;opacity:.85;">{{ ((entry.filed_path or entry.pdf_path or '')).split('\\')[-1] }}</span></div>
+    <div style="padding:6px 12px;border-bottom:1px solid #eee;font-size:.72rem;font-family:Consolas,monospace;color:var(--mid);word-break:break-all;">
+      {{ ((entry.filed_path or entry.pdf_path)|unc) or '(no document on file)' }}
+    </div>
+    <div class="card-body" style="padding:0;height:72vh;">
+      {% if entry.filed_path or entry.pdf_path %}
+      <iframe src="/entry/{{ entry.id }}/pdf" style="width:100%;height:100%;border:none;background:#fff;"></iframe>
+      {% else %}
+      <div style="padding:40px;text-align:center;color:var(--mid);">This record has no document on file &mdash; the packet may be its only paper.</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card-header">&#127381; No matching record</div>
+    <div class="card-body">
+      <p style="color:var(--mid);font-size:.9rem;">Nothing in Klick Klack matches this packet. If approved, it becomes a new record
+      that is <strong>already marked Paid</strong> with the details below (an OCR cross-check runs before anything is created).</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <div class="card-header">The details, side by side</div>
+  <div class="card-body" style="padding:0;">
+    <table style="width:100%;border-collapse:collapse;font-size:.88rem;">
+      <tr style="background:#f0f0f0;text-align:left;">
+        <th style="padding:7px 12px;width:18%;"></th>
+        <th style="padding:7px 12px;">The packet says (from its filename)</th>
+        <th style="padding:7px 12px;">{% if entry %}Record {{ entry.record_no or '#' ~ entry.id }} says{% else %}&mdash;{% endif %}</th>
+      </tr>
+      {% set amt_same = entry and row.amount and entry.amount is not none and (row.amount|float - entry.amount)|abs < 0.01 %}
+      <tr style="border-top:1px solid #eee;"><td style="padding:6px 12px;font-weight:600;">Amount</td>
+        <td style="padding:6px 12px;{% if entry %}color:{% if amt_same %}#2E7D32{% else %}#C62828{% endif %};font-weight:600;{% endif %}">{% if row.amount %}${{ "{:,.2f}".format(row.amount|float) }}{% else %}&mdash;{% endif %}</td>
+        <td style="padding:6px 12px;{% if entry %}color:{% if amt_same %}#2E7D32{% elif entry.amount is none %}var(--mid){% else %}#C62828{% endif %};font-weight:600;{% endif %}">{% if entry %}{% if entry.amount is not none %}${{ "{:,.2f}".format(entry.amount) }}{% else %}no amount logged{% endif %}{% endif %}</td></tr>
+      <tr style="border-top:1px solid #eee;"><td style="padding:6px 12px;font-weight:600;">Payee / vendor</td>
+        <td style="padding:6px 12px;">{{ row.payee or '—' }}</td>
+        <td style="padding:6px 12px;">{% if entry %}{{ entry.vendor or '—' }}{% endif %}</td></tr>
+      <tr style="border-top:1px solid #eee;"><td style="padding:6px 12px;font-weight:600;">Date</td>
+        <td style="padding:6px 12px;">{{ row.name_date or '—' }} <span style="color:var(--mid);">(payment)</span></td>
+        <td style="padding:6px 12px;">{% if entry %}{{ entry.date_received or '—' }} <span style="color:var(--mid);">(received)</span>{% endif %}</td></tr>
+      <tr style="border-top:1px solid #eee;"><td style="padding:6px 12px;font-weight:600;">Check / method</td>
+        <td style="padding:6px 12px;">{% if row.check %}CK#{{ row.check }}{% elif row.method %}{{ row.method }}{% else %}&mdash;{% endif %}</td>
+        <td style="padding:6px 12px;">{% if entry %}{% if entry.check_number %}CK#{{ entry.check_number }}{% elif entry.payment_method %}{{ entry.payment_method }}{% else %}&mdash;{% endif %}{% endif %}</td></tr>
+      <tr style="border-top:1px solid #eee;"><td style="padding:6px 12px;font-weight:600;">Entity</td>
+        <td style="padding:6px 12px;">{{ row.entity or '—' }}</td>
+        <td style="padding:6px 12px;">{% if entry %}{{ entry.entity_code or '—' }}{% endif %}</td></tr>
+      <tr style="border-top:1px solid #eee;"><td style="padding:6px 12px;font-weight:600;">Properties</td>
+        <td style="padding:6px 12px;">{{ row.props or '—' }}</td>
+        <td style="padding:6px 12px;">{% if entry %}{{ entry.property_code or '—' }}{% endif %}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

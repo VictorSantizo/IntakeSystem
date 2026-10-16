@@ -1,0 +1,417 @@
+{# App-wide widgets shared by BOTH looks (classic base.html and new/base.html):
+   the Report-a-Problem modal, the universal PDF viewer, the hover-to-highlight
+   document viewer, click-to-sort tables, the Helper's "show me" flash, and the
+   Klick Klack Helper chat bubble. Styling rides on the CSS variables each look
+   defines (--navy/--blue/--green/--orange/--pale/...) — the new look maps
+   them to its own palette so these widgets recolor without forking. Extracted
+   verbatim from base.html; edit here once, never copy per-look. #}
+{% if session.get('user') %}
+{# Mail-flow watchdog (Joshua 2026-08-10: "if mail stopped flowing, how would
+   we know? We should get a big notice."). mail_health.check() feeds
+   `mail_alert` via the context processor; anything in it renders as this red
+   bar, which the one-liner below moves to the very top of the page — above
+   the nav, both looks, every page, until the mailbox is fixed. #}
+{% if mail_alert %}
+<div id="mail-alert" style="background:#B71C1C;color:#fff;padding:11px 20px;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.3);">
+  <strong>&#9888;&#65039; MAIL INTAKE NEEDS ATTENTION</strong> &mdash; bills may be arriving unseen.
+  {% for p in mail_alert %}<br><strong>{{ p.account }}</strong>: {{ p.text }}{% endfor %}
+  <br><a href="/settings" style="color:#FFE082;font-weight:700;">Open Settings &rarr; check the mailbox passwords</a>
+  <span style="opacity:.85;">(an admin signs in for that — if that isn&rsquo;t you, tell Joshua or Karen)</span>
+</div>
+<script>(function(){var b=document.getElementById('mail-alert');if(b&&document.body.firstChild!==b)document.body.insertBefore(b,document.body.firstChild);})();</script>
+{% endif %}
+{# Starvation watchdog (2026-08-11) — the 2h34m stall nobody could see from
+   inside the app. Amber, not red: by the time this renders the app is usually
+   serving again, and it exists so the outage is on the record with a pointer
+   to the thread dump that names the cause. #}
+{% if stall_alert %}
+<div id="stall-alert" style="background:#8D6E00;color:#fff;padding:11px 20px;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.3);">
+  <strong>&#9203; KLICKITY STOPPED ANSWERING</strong>
+  {% for p in stall_alert %}<br>{{ p.text }}{% endfor %}
+</div>
+<script>(function(){var b=document.getElementById('stall-alert');if(b&&document.body.firstChild!==b)document.body.insertBefore(b,document.body.firstChild);})();</script>
+{% endif %}
+<div id="report-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+  <div class="card" style="width:480px;max-width:95vw;">
+    <div class="card-header" style="background:var(--navy);display:flex;justify-content:space-between;align-items:center;">
+      <span>&#128030; Report a Problem</span>
+      <span onclick="closeReport()" style="cursor:pointer;font-size:1.3rem;line-height:1;">&times;</span>
+    </div>
+    <div class="card-body">
+      <div id="report-form-wrap">
+        <p style="font-size:.85rem;color:var(--mid);margin-bottom:10px;">Tell us what went wrong. We'll automatically include the page you're on plus some technical details to help track it down.</p>
+        <textarea id="report-text" placeholder="What happened? What were you trying to do?" style="width:100%;min-height:110px;"></textarea>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn btn-primary" id="report-send" onclick="sendReport()">Send Report</button>
+          <button class="btn btn-ghost" onclick="closeReport()">Cancel</button>
+        </div>
+      </div>
+      <div id="report-thanks" style="display:none;text-align:center;padding:18px;color:#2E7D32;">
+        &#10003; <strong>Thank you!</strong> Your report was sent.<br>
+        <span style="font-size:.85rem;color:var(--mid);">We'll look into it.</span>
+        <div style="margin-top:14px;"><button class="btn btn-ghost" onclick="closeReport()">Close</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function openReport(){var m=document.getElementById('report-modal');m.style.display='flex';document.getElementById('report-form-wrap').style.display='';document.getElementById('report-thanks').style.display='none';document.getElementById('report-text').value='';var b=document.getElementById('report-send');b.disabled=false;b.textContent='Send Report';document.getElementById('report-text').focus();
+  // Pre-load the screenshot library (vendored, ~194KB) only when the modal opens.
+  if(!window.html2canvas && !document.getElementById('h2c-script')){
+    var s=document.createElement('script');s.id='h2c-script';s.src='/static/html2canvas.min.js';document.head.appendChild(s);
+  }
+}
+function closeReport(){document.getElementById('report-modal').style.display='none';}
+function _captureScreenshot(){
+  // Best-effort JPEG of the page (the modal is hidden during capture). Resolves
+  // to null on any failure — a report must never fail because of the screenshot.
+  return new Promise(function(resolve){
+    if(!window.html2canvas){resolve(null);return;}
+    var modal=document.getElementById('report-modal');
+    var prev=modal.style.display; modal.style.display='none';
+    var done=false;
+    var bail=setTimeout(function(){if(!done){done=true;modal.style.display=prev;resolve(null);}},6000);
+    try{
+      html2canvas(document.body,{scale:Math.min(1,1400/Math.max(window.innerWidth,1)),logging:false})
+        .then(function(canvas){
+          if(done)return; done=true; clearTimeout(bail); modal.style.display=prev;
+          try{resolve(canvas.toDataURL('image/jpeg',0.6));}catch(e){resolve(null);}
+        }).catch(function(){if(!done){done=true;clearTimeout(bail);modal.style.display=prev;resolve(null);}});
+    }catch(e){if(!done){done=true;clearTimeout(bail);modal.style.display=prev;resolve(null);}}
+  });
+}
+function sendReport(){
+  var txt=document.getElementById('report-text').value.trim();
+  if(!txt){alert('Please describe the problem first.');return;}
+  var btn=document.getElementById('report-send');btn.disabled=true;btn.textContent='Sending…';
+  _captureScreenshot().then(function(shot){
+    return fetch('/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      description:txt, page_url:window.location.href, browser:navigator.userAgent,
+      screen:(window.screen?window.screen.width+'x'+window.screen.height:''),
+      js_errors:(window.__jsErrors||[]),
+      screenshot:shot
+    })});
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.ok){document.getElementById('report-form-wrap').style.display='none';document.getElementById('report-thanks').style.display='';}
+    else{alert(d.error||'Could not send report.');btn.disabled=false;btn.textContent='Send Report';}
+  }).catch(function(){alert('Could not send report. Check your connection.');btn.disabled=false;btn.textContent='Send Report';});
+}
+</script>
+{% endif %}
+
+{# Universal in-app PDF viewer (Tier 1 #11). openPdf(url,title) shows any document
+   in a modal instead of a new browser tab — staff who can't navigate back from a
+   new tab stay in the app. A "New tab" escape hatch is kept for power users. #}
+<div id="pdf-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;align-items:center;justify-content:center;padding:24px;">
+  <div class="card" style="width:1000px;max-width:96vw;height:92vh;display:flex;flex-direction:column;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <span id="pdf-modal-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Document</span>
+      <span style="display:flex;gap:16px;align-items:center;white-space:nowrap;">
+        <a id="pdf-modal-open" href="#" target="_blank" style="color:#fff;font-size:.78rem;text-decoration:underline;" title="Open in a separate browser tab">New tab &#8599;</a>
+        <span onclick="closePdf()" style="cursor:pointer;font-size:1.4rem;line-height:1;" title="Close (Esc)">&times;</span>
+      </span>
+    </div>
+    <div class="card-body" style="padding:0;flex:1;">
+      <iframe id="pdf-modal-frame" src="" style="width:100%;height:100%;border:none;border-radius:0 0 8px 8px;"></iframe>
+    </div>
+  </div>
+</div>
+<script>
+function openPdf(url, title){
+  document.getElementById('pdf-modal-frame').src=url;
+  document.getElementById('pdf-modal-title').textContent=title||'Document';
+  var o=document.getElementById('pdf-modal-open'); if(o) o.href=url;
+  document.getElementById('pdf-modal').style.display='flex';
+  document.addEventListener('keydown', __pdfEsc);
+}
+function closePdf(){
+  document.getElementById('pdf-modal').style.display='none';
+  document.getElementById('pdf-modal-frame').src='';   // stop loading / free memory
+  document.removeEventListener('keydown', __pdfEsc);
+}
+function __pdfEsc(e){ if(e.key==='Escape') closePdf(); }
+document.addEventListener('click', function(e){
+  var m=document.getElementById('pdf-modal');
+  if(m && m.style.display!=='none' && e.target===m) closePdf();  // backdrop click
+});
+
+/* ── Hover-to-highlight document viewer ──────────────────────────────────────
+   initDocViewer({viewer, hlUrl, pageUrl, fallback}) turns the given container
+   into a page-image viewer with highlight overlays, and wires every [data-hl]
+   element on the page so hovering (or focusing) it highlights that field's
+   value in the document. If highlights aren't available (image-only document,
+   render problem), the container falls back to the plain PDF iframe. */
+function initDocViewer(opts){
+  var viewer=document.getElementById(opts.viewer);
+  if(!viewer) return;
+  viewer.innerHTML='<div class="doc-loading">Loading document…</div>';
+  var fellBack=false;
+  function fallback(){
+    if(fellBack) return; fellBack=true;
+    viewer.innerHTML='<iframe src="'+opts.fallback+'" style="width:100%;height:100%;border:none;border-radius:0 0 8px 8px;background:#fff;"></iframe>';
+    viewer.style.padding='0';
+  }
+  fetch(opts.hlUrl).then(function(r){return r.ok?r.json():null;}).then(function(hl){
+    if(!hl || !hl.ok || !hl.pages){ fallback(); return; }
+    viewer.innerHTML='';
+    for(var p=1;p<=hl.pages;p++){
+      var wrap=document.createElement('div');
+      wrap.className='doc-page-wrap'; wrap.dataset.page=p;
+      var img=document.createElement('img');
+      img.className='doc-page';
+      if(p>1) img.loading='lazy';
+      else img.onerror=fallback;   // first page failing to render => plain iframe
+      img.src=opts.pageUrl+p;
+      wrap.appendChild(img); viewer.appendChild(wrap);
+    }
+    var fields=hl.fields||{};
+    Object.keys(fields).forEach(function(f){
+      fields[f].forEach(function(b){
+        var wrap=viewer.querySelector('.doc-page-wrap[data-page="'+b.page+'"]');
+        if(!wrap) return;
+        var d=document.createElement('div');
+        d.className='hl hl-'+f;
+        d.style.left=(b.x0*100)+'%';
+        d.style.top=(b.top*100)+'%';
+        d.style.width=(Math.max(b.x1-b.x0,0.004)*100)+'%';
+        d.style.height=(Math.max(b.bottom-b.top,0.004)*100)+'%';
+        wrap.appendChild(d);
+      });
+    });
+    function setHl(f,show){
+      var boxes=viewer.querySelectorAll('.hl-'+f);
+      if(!boxes.length) return;
+      boxes.forEach(function(b){ b.classList.toggle('hl-on',show); });
+      if(show){
+        var b=boxes[0];
+        var top=b.parentElement.offsetTop+b.offsetTop;
+        viewer.scrollTo({top:Math.max(top-viewer.clientHeight*0.35,0),behavior:'smooth'});
+      }
+    }
+    document.querySelectorAll('[data-hl]').forEach(function(el){
+      var f=el.dataset.hl;
+      if(!fields[f] || !fields[f].length) return;
+      el.classList.add('hl-avail');
+      var lab=el.querySelector('label') || el.firstElementChild;
+      if(lab && !lab.querySelector('.hl-pin')){
+        var pin=document.createElement('span');
+        pin.className='hl-pin'; pin.textContent='📍 in doc';
+        pin.title='Hover to see where this was found in the document';
+        lab.appendChild(pin);
+      }
+      var on=function(){ setHl(f,true); }, off=function(){ setHl(f,false); };
+      el.addEventListener('mouseenter',on);
+      el.addEventListener('mouseleave',off);
+      el.addEventListener('focusin',on);
+      el.addEventListener('focusout',off);
+    });
+  }).catch(fallback);
+}
+</script>
+
+<style>
+  /* Click-to-sort tables + the Helper's "show me" flash */
+  table.sortable th[data-sortable]{cursor:pointer;white-space:nowrap;}
+  table.sortable th[data-sortable]:hover{text-decoration:underline;}
+  .sort-arrow{font-size:.7em;opacity:.9;}
+  .kk-flash{animation:kkFlash 2.4s ease-out;}
+  @keyframes kkFlash{
+    0%,60%{outline:3px solid var(--orange);outline-offset:3px;box-shadow:0 0 0 6px rgba(237,125,49,.25);}
+    100%{outline:3px solid transparent;outline-offset:3px;box-shadow:none;}
+  }
+</style>
+<script>
+/* ── Click-to-sort tables ──────────────────────────────────────────────────────
+   Any <table class="sortable"> gets clickable headers: numbers ($, commas, %)
+   sort numerically, everything else alphabetically; blanks and — sort to
+   whichever end matches the direction (bottom on ascending, TOP on descending)
+   so a missing due date surfaces on one click and can't be overlooked; a second
+   click flips the direction. Rows carry their forms,
+   checkboxes, and inline handlers with them (we move the <tr> nodes). Headers
+   with no text (checkbox/action columns) or data-nosort are left alone. */
+(function(){
+  function keyOf(row, i){
+    var c = row.cells[i];
+    if(!c) return '';
+    if(c.dataset && c.dataset.sort !== undefined) return c.dataset.sort;
+    return c.textContent.trim();
+  }
+  function isBlank(v){ return v === '' || v === '—' || v === '-'; }
+  function num(v){
+    /* Only treat a value as a number when the WHOLE cleaned string is numeric.
+       parseFloat used to be lenient: "2026-07-05" parsed to 2026, so every
+       date in a year collapsed to the same number and dates never sorted.
+       ISO dates now fall through to string compare, which orders them right. */
+    var s = String(v).replace(/[$,\s%]/g, '');
+    return /^-?\d*\.?\d+$/.test(s) ? parseFloat(s) : null;
+  }
+  function sortTable(tbl, i, th){
+    var dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+    Array.prototype.forEach.call(th.parentElement.cells, function(h){
+      delete h.dataset.dir;
+      var a = h.querySelector('.sort-arrow'); if(a) a.textContent = '';
+    });
+    th.dataset.dir = dir;
+    th.querySelector('.sort-arrow').textContent = dir === 'asc' ? ' ▲' : ' ▼';
+    var tbody = tbl.tBodies[0];
+    var keyed = Array.prototype.slice.call(tbody.rows).map(function(r, idx){
+      return {r: r, idx: idx, v: keyOf(r, i)};
+    });
+    keyed.sort(function(a, b){
+      var ab = isBlank(a.v), bb = isBlank(b.v);
+      if(ab || bb){
+        if(ab && bb) return a.idx - b.idx;
+        var br = ab ? 1 : -1;              /* blank sorts to the end on asc... */
+        return dir === 'asc' ? br : -br;   /* ...and floats to the top on desc, so it's never missed */
+      }
+      var an = num(a.v), bn = num(b.v);
+      var cmp = (an !== null && bn !== null)
+        ? an - bn
+        : String(a.v).localeCompare(String(b.v), undefined, {sensitivity: 'base'});
+      if(cmp === 0) return a.idx - b.idx;   /* stable */
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    keyed.forEach(function(k){ tbody.appendChild(k.r); });
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('table.sortable').forEach(function(tbl){
+      if(!tbl.tHead || !tbl.tHead.rows.length || !tbl.tBodies.length) return;
+      var hs = tbl.tHead.rows[tbl.tHead.rows.length - 1].cells;
+      Array.prototype.forEach.call(hs, function(th, i){
+        if(!th.textContent.trim() || th.dataset.nosort !== undefined) return;
+        th.setAttribute('data-sortable', '');
+        th.title = 'Click to sort by ' + th.textContent.trim();
+        var a = document.createElement('span');
+        a.className = 'sort-arrow';
+        th.appendChild(a);
+        th.addEventListener('click', function(){ sortTable(tbl, i, th); });
+      });
+    });
+  });
+})();
+
+/* ── "Show me" highlights ──────────────────────────────────────────────────────
+   A URL hash of #kk=<target> scrolls to the element carrying
+   data-kk="<target>" and flashes it. The Klick Klack Helper emits these links
+   ("Show me") so it can point right at the button it's describing. */
+(function(){
+  function flash(){
+    var m = (location.hash || '').match(/^#kk=([\w-]+)$/);
+    if(!m) return;
+    var el = document.querySelector('[data-kk="' + m[1] + '"]');
+    if(!el) return;
+    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.classList.remove('kk-flash');
+    void el.offsetWidth;   /* restart the animation on a repeat click */
+    el.classList.add('kk-flash');
+    setTimeout(function(){ el.classList.remove('kk-flash'); }, 2600);
+  }
+  document.addEventListener('DOMContentLoaded', flash);
+  window.addEventListener('hashchange', flash);
+})();
+</script>
+
+{% if session.get('user') %}
+{# ── Klick Klack Helper — the in-app assistant (chat bubble, every page) ────── #}
+<style>
+  #kk-helper-btn{position:fixed;bottom:22px;right:22px;z-index:1200;width:56px;height:56px;
+    border-radius:50%;border:none;background:var(--navy);color:#fff;font-size:1.5rem;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.35);transition:transform .12s;}
+  #kk-helper-btn:hover{transform:scale(1.08);}
+  #kk-helper{position:fixed;bottom:90px;right:22px;z-index:1200;width:370px;max-width:calc(100vw - 32px);
+    height:520px;max-height:calc(100vh - 130px);display:none;flex-direction:column;background:#fff;
+    border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.35);overflow:hidden;font-size:.9rem;}
+  #kk-helper .kk-head{background:var(--navy);color:#fff;padding:12px 16px;font-weight:bold;
+    display:flex;justify-content:space-between;align-items:center;}
+  #kk-helper .kk-head button{background:none;border:none;color:rgba(255,255,255,.8);font-size:1rem;cursor:pointer;}
+  #kk-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#f7f8fa;}
+  .kk-m{max-width:85%;padding:9px 12px;border-radius:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+  .kk-user{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:3px;}
+  .kk-bot{align-self:flex-start;background:#fff;border:1px solid #e3e6ea;border-bottom-left-radius:3px;}
+  .kk-bot a{color:var(--blue);font-weight:600;}
+  .kk-err{align-self:flex-start;background:#FDE8E8;border:1px solid #C62828;color:#B71C1C;}
+  #kk-form{display:flex;gap:8px;padding:10px;border-top:1px solid #e3e6ea;background:#fff;}
+  #kk-input{flex:1;border:1px solid #ccc;border-radius:8px;padding:8px 10px;font-size:.9rem;font-family:inherit;}
+  #kk-form button{background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;}
+  #kk-form button:disabled{opacity:.5;cursor:default;}
+</style>
+<button id="kk-helper-btn" title="Klick Klack Helper — ask how to do anything in the app" aria-label="Open the helper">&#128172;</button>
+<div id="kk-helper" role="dialog" aria-label="Klick Klack Helper">
+  <div class="kk-head"><span>&#128172; Klick Klack Helper</span>
+    <span><button type="button" title="Clear this conversation" onclick="kkClear()">&#128465;</button>
+    <button type="button" title="Close" onclick="kkToggle(false)">&#10005;</button></span></div>
+  <div id="kk-msgs"></div>
+  <form id="kk-form">
+    <input id="kk-input" type="text" autocomplete="off" maxlength="2000"
+           placeholder="Ask me anything about the app&hellip;">
+    <button type="submit" id="kk-send">Ask</button>
+  </form>
+</div>
+<script>
+(function(){
+  var KEY='kk_helper_chat';
+  var msgs=document.getElementById('kk-msgs'), form=document.getElementById('kk-form'),
+      input=document.getElementById('kk-input'), send=document.getElementById('kk-send'),
+      panel=document.getElementById('kk-helper'), btn=document.getElementById('kk-helper-btn');
+  var history=[];
+  try{ history=JSON.parse(sessionStorage.getItem(KEY)||'[]'); }catch(e){ history=[]; }
+
+  // Minimal safe renderer: escape everything, then allow **bold**, `code`,
+  // and [text](/internal-link) — internal links only.
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function render(s){
+    return esc(s)
+      .replace(/\[([^\]]{1,80})\]\(((?:\/|#)[A-Za-z0-9_\-\/#?=&.]{0,120})\)/g,
+               '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]{1,200})\*\*/g,'<b>$1</b>')
+      .replace(/`([^`]{1,200})`/g,'<code>$1</code>');
+  }
+  function bubble(role,text){
+    var d=document.createElement('div');
+    d.className='kk-m '+(role==='user'?'kk-user':role==='error'?'kk-m kk-err':'kk-bot');
+    d.innerHTML=render(text);
+    msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+    return d;
+  }
+  function redraw(){
+    msgs.innerHTML='';
+    if(!history.length){
+      bubble('assistant',"Hi! I'm the Klick Klack Helper. Ask me how to do anything in the app — like \"how do I clear duplicates?\" or \"where do I see what's owed?\"");
+    }
+    history.forEach(function(m){ bubble(m.role,m.content); });
+  }
+  window.kkToggle=function(open){
+    var show=(open!==undefined)?open:(panel.style.display!=='flex');
+    panel.style.display=show?'flex':'none';
+    if(show){ redraw(); input.focus(); }
+  };
+  window.kkClear=function(){ history=[]; sessionStorage.removeItem(KEY); redraw(); };
+  btn.addEventListener('click',function(){ kkToggle(); });
+
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    var q=input.value.trim();
+    if(!q||send.disabled) return;
+    input.value='';
+    history.push({role:'user',content:q}); bubble('user',q);
+    send.disabled=true;
+    var thinking=bubble('assistant','&hellip;'); thinking.innerHTML='&hellip;';
+    fetch('/api/assistant',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:q,history:history.slice(0,-1).slice(-12),page:location.pathname})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        thinking.remove();
+        if(d.reply){
+          history.push({role:'assistant',content:d.reply});
+          bubble('assistant',d.reply);
+        }else{
+          bubble('error',d.error||'Something went wrong — try again.');
+        }
+        sessionStorage.setItem(KEY,JSON.stringify(history.slice(-24)));
+      })
+      .catch(function(){ thinking.remove(); bubble('error','Could not reach the app — is it still running?'); })
+      .finally(function(){ send.disabled=false; input.focus(); });
+  });
+})();
+</script>
+{% endif %}

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wall calendar — Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<style>
+  :root{
+    --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+    --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+    --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+    --green:#2e6e3e; --red:#b03a2e; --blue-ink:#2e5aa8; --ghost:#8d846f;
+    --sticky:#f7e896; --sticky-edge:#d9c65a; --weekend:#f6f0df;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f; }
+  }
+  :root[data-theme="dark"]{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f; }
+  :root[data-theme="light"]{ --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464; }
+
+  body{ background:var(--room); color:var(--room-ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+  .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+  .mono{ font-family:Consolas,"Courier New",monospace; }
+  a{ color:inherit; }
+  a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  /* ── nav ── */
+  .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+    gap:18px; padding:10px 22px; flex-wrap:wrap; }
+  .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+  .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+  .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+  .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+  .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+
+  .context{ max-width:1180px; margin:14px auto 0; padding:0 20px;
+    font-size:.82rem; color:var(--room-ink-soft); display:flex; gap:14px; flex-wrap:wrap; }
+  .context b{ color:var(--room-ink); }
+
+  /* ── the sheet on the wall ── */
+  .wall{ max-width:1180px; margin:14px auto 40px; padding:0 20px; }
+  .nail{ width:10px; height:10px; border-radius:50%; background:var(--wood-dark);
+    margin:0 auto 6px; }
+  .sheet{ background:var(--paper); border:2px solid var(--paper-edge); color:var(--ink); }
+  .grommets{ display:flex; justify-content:center; gap:120px; padding:10px 0 0; }
+  .grommets i{ width:16px; height:16px; border-radius:50%; background:var(--room);
+    border:3px solid var(--paper-edge); }
+
+  .sheet-head{ display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+    padding:10px 26px 6px; border-bottom:2px solid var(--wood); }
+  .month{ font-family:Rockwell,"Rockwell Nova",Georgia,serif; font-size:2.1rem;
+    color:var(--wood-dark); font-weight:700; }
+  .month-nav{ font-size:.9rem; color:var(--pencil); display:flex; gap:10px; }
+  .month-nav a{ text-decoration:none; border:1px solid var(--paper-edge); padding:2px 10px; }
+  .sheet-sub{ font-size:.83rem; color:var(--pencil); margin-left:auto; max-width:420px; }
+
+  .sheet-body{ display:flex; gap:0; flex-wrap:wrap; }
+
+  /* margin column — penciled tallies + sticky notes */
+  .margin{ flex:0 0 218px; border-right:2px solid var(--paper-edge);
+    padding:16px 16px 20px; display:flex; flex-direction:column; gap:16px; }
+  .tally{ font-size:.95rem; color:var(--pencil); line-height:1.55; }
+  .tally .t-head{ font-size:1.02rem; margin-bottom:4px; }
+  .tally .num{ color:var(--ink); }
+  .tally .bad{ color:var(--red); }
+  .tally .sum{ border-top:1px solid var(--pencil); margin-top:6px; padding-top:4px; }
+
+  .margin-sub{ font-size:.85rem; color:var(--wood-dark); font-weight:600; }
+  .ghost-list{ display:flex; flex-direction:column; gap:6px; }
+  .ghost-empty{ color:var(--ghost); font-size:.83rem; font-style:italic; }
+
+  .sticky{ background:var(--sticky); border-bottom:4px solid var(--sticky-edge);
+    padding:12px 13px; font-size:.92rem; line-height:1.45; color:#4a3d0c;
+    transform:rotate(-1.6deg); max-width:200px; }
+  .sticky + .sticky{ transform:rotate(1.2deg); }
+  .sticky .act{ display:inline-block; margin-top:6px; text-decoration:underline;
+    text-underline-offset:3px; cursor:pointer; }
+
+  /* ── the grid ── */
+  .grid-wrap{ flex:1 1 640px; overflow-x:auto; }
+  .grid{ min-width:840px; display:grid; grid-template-columns:repeat(7,1fr); }
+  .dow{ text-align:center; font-size:.78rem; padding:7px 4px 5px; color:var(--wood-dark);
+    border-bottom:2px solid var(--wood); font-weight:600; }
+  .day{ min-height:96px; border-right:1px solid var(--paper-edge);
+    border-bottom:1px solid var(--paper-edge); padding:5px 6px 6px; position:relative;
+    display:flex; flex-direction:column; gap:4px; }
+  .day.wkend{ background:var(--weekend); }
+  .day.blank{ background:var(--weekend); opacity:.55; }
+  .dnum{ font-size:.82rem; color:var(--pencil); align-self:flex-start; padding:1px 6px; }
+  .day.today .dnum{ border:2px solid var(--red); border-radius:50%; color:var(--red);
+    font-weight:700; }
+  .day.today{ outline:2px solid var(--red); outline-offset:-2px; }
+  .dtotal{ margin-top:auto; text-align:right; font-size:.82rem; color:var(--pencil); }
+
+  /* ── bill slips ── */
+  .slip{ display:block; border:1px solid var(--paper-edge); background:var(--paper);
+    padding:4px 6px 4px 7px; font-size:.74rem; line-height:1.3; cursor:pointer;
+    text-decoration:none; }
+  .slip:hover{ border-color:var(--wood); }
+  .s-top{ display:flex; justify-content:space-between; gap:6px; font-weight:600;
+    color:var(--ink); }
+  .s-top .amt{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .s-sub{ display:flex; justify-content:space-between; gap:6px; margin-top:1px;
+    color:var(--pencil); font-size:.68rem; }
+  .s-sub .mono{ letter-spacing:-.02em; }
+  .slip.paid{ opacity:.62; }
+  .slip.paid .tag{ color:var(--green); font-weight:700; }
+  .slip.late{ border-left:4px solid var(--red); }
+  .slip.late .tag{ color:var(--red); font-weight:700; }
+  .slip.instack .tag{ color:var(--blue-ink); font-weight:600; }
+  .slip.ghost{ border:1px dashed var(--ghost); background:transparent; color:var(--ghost); }
+  .slip.ghost .s-top{ color:var(--ghost); font-weight:500; }
+  .slip.ghost .tag{ font-style:italic; }
+  .more-tab{ display:inline-block; align-self:flex-start; border:1px solid var(--wood);
+    border-bottom-width:3px; background:var(--weekend); color:var(--wood-dark);
+    font-size:.7rem; font-weight:600; padding:2px 8px; cursor:pointer; text-decoration:none; }
+
+  /* ── legend ── */
+  .legend{ display:flex; gap:18px; flex-wrap:wrap; padding:10px 26px 14px;
+    border-top:2px solid var(--paper-edge); font-size:.78rem; color:var(--pencil); }
+  .legend .key{ display:flex; align-items:center; gap:7px; }
+  .swatch{ width:30px; height:14px; border:1px solid var(--paper-edge); background:var(--paper); flex:none; }
+  .swatch.k-paid{ opacity:.55; }
+  .swatch.k-late{ border-left:4px solid var(--red); }
+  .swatch.k-ghost{ border:1px dashed var(--ghost); background:transparent; }
+</style>
+</head>
+<body>
+
+{% macro money(v) -%}
+${{ '{:,.2f}'.format(v or 0) }}
+{%- endmacro %}
+
+{% macro entprop(ec, pc) -%}
+{{ ec or '' }}{% if ec and pc %}·{% endif %}{{ pc or '' }}
+{%- endmacro %}
+
+{% set month_names = ['', 'January','February','March','April','May','June',
+                       'July','August','September','October','November','December'] %}
+{% set prev_name = month_names[prev_m.split('-')[1]|int] %}
+{% set next_name = month_names[next_m.split('-')[1]|int] %}
+{% set month_only = month_label.split(' ')[0] %}
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <span class="tabs">
+    <a class="sib" href="/desk">the desk</a>
+    <a class="sib" href="/cabinet">file cabinet</a>
+    <a class="sib" href="/rolodex">rolodex</a>
+    <a class="sib" href="/intray">in-tray</a>
+    <span class="on">wall calendar</span>
+    <a class="sib" href="/board">corkboard</a>
+    <a class="sib" href="/tray">tray gauge</a>
+  </span>
+</nav>
+
+<div class="context">
+  <span>The bills-due wall calendar — every slip is a real bill, same records as the pay stack.
+    Watching happens here; paying happens in the stack.</span>
+</div>
+
+<div class="wall">
+  <div class="nail"></div>
+  <div class="sheet">
+    <div class="grommets"><i></i><i></i></div>
+    <div class="sheet-head">
+      <span class="month">{{ month_label }}</span>
+      <span class="month-nav">
+        <a href="/calendar?month={{ prev_m }}">&larr; {{ prev_name }}</a>
+        <a href="/calendar?month={{ next_m }}">{{ next_name }} &rarr;</a>
+      </span>
+      <span class="sheet-sub">Every bill with a due date this month — drawn from the same records
+        as the pay stack and the expected-bills radar. Nothing here is typed in by hand.</span>
+    </div>
+
+    <div class="sheet-body">
+
+      <div class="margin">
+        <div class="tally hand">
+          <div class="t-head">{{ month_only }} so far —</div>
+          {% if bill_count == 0 %}
+            nothing due this month
+          {% else %}
+            {{ bill_count }} bill{{ 's' if bill_count != 1 else '' }} on the calendar
+          {% endif %}<br>
+          paid: <span class="num">{{ tallies.paid_count }} · {{ money(tallies.paid_sum) }}</span><br>
+          in the pay stack: <span class="num">{{ tallies.stack_count }} · {{ money(tallies.stack_sum) }}</span><br>
+          past due: <span class="bad">{{ tallies.late_count }} · {{ money(tallies.late_sum) }}</span><br>
+          expected, not seen: <span class="num">{{ ghosts|length }} · ≈ {{ money(ghost_sum) }}</span>
+          <div class="sum">whole month ≈ <span class="num">{{ money(month_sum) }}</span></div>
+          {% if next_in_stack > 0 %}
+            already in the stack for next month: <span class="num">{{ next_in_stack }}</span>
+          {% endif %}
+        </div>
+
+        <div>
+          <div class="margin-sub">expected, not seen yet</div>
+          <div class="ghost-list">
+            {% for g in ghosts %}
+              <a class="slip ghost" href="/expected">
+                <div class="s-top">
+                  <span>{{ g.vendor }}</span>
+                  <span class="amt">{% if g.typical_amount is not none %}≈ {{ money(g.typical_amount) }}{% else %}—{% endif %}</span>
+                </div>
+                <div class="s-sub">
+                  <span class="mono">{{ entprop(g.entity_code, g.property_code) }}</span>
+                  <span class="tag">{{ (g.cadence or 'monthly')|capitalize }}</span>
+                </div>
+              </a>
+            {% else %}
+              <div class="ghost-empty">none this month</div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {% for st in stickies %}
+          <div class="sticky hand">{{ st.text }}
+            <a class="act" href="{{ st.url }}">{{ st.link }}</a></div>
+        {% endfor %}
+      </div>
+
+      <div class="grid-wrap">
+        <div class="grid">
+          <div class="dow">Sun</div><div class="dow">Mon</div><div class="dow">Tue</div>
+          <div class="dow">Wed</div><div class="dow">Thu</div><div class="dow">Fri</div>
+          <div class="dow">Sat</div>
+
+          {% for week in weeks %}
+            {% for cell in week %}
+              {% set wkend = (loop.index0 == 0 or loop.index0 == 6) %}
+              {% if cell is none %}
+                <div class="day blank{{ ' wkend' if wkend else '' }}"></div>
+              {% else %}
+                <div class="day{{ ' wkend' if wkend else '' }}{{ ' today' if cell.is_today else '' }}">
+                  <span class="dnum">{{ cell.day }}</span>
+                  {% for s in cell.slips %}
+                    {% set state_class = 'paid' if s.state == 'paid' else ('late' if s.state == 'late' else 'instack') %}
+                    {% set postxt = ('#' ~ s.pos ~ ' in stack') if s.pos is not none else 'arrived' %}
+                    <a class="slip {{ state_class }}" href="/entry/{{ s.id }}/view">
+                      <div class="s-top"><span>{{ s.vendor }}</span><span class="amt">{{ money(s.amount) }}</span></div>
+                      <div class="s-sub">
+                        <span class="mono">{{ entprop(s.entity_code, s.property_code) }}</span>
+                        {% if s.state == 'paid' %}
+                          <span class="tag">&#10003; {{ s.paid_label }}</span>
+                        {% elif s.state == 'late' %}
+                          <span class="tag">past due · {{ postxt }}</span>
+                        {% elif s.due_today %}
+                          <span class="tag">due today · {{ postxt }}</span>
+                        {% else %}
+                          <span class="tag">{{ postxt }}</span>
+                        {% endif %}
+                      </div>
+                    </a>
+                  {% endfor %}
+                  {% if cell.more_count > 0 %}
+                    <a class="more-tab" href="/bills?view=due">+{{ cell.more_count }} more · {{ money(cell.more_sum) }}</a>
+                  {% endif %}
+                  {% if cell.total is not none %}
+                    <div class="dtotal hand">= {{ money(cell.total) }}</div>
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="key"><span class="swatch"></span> arrived — waiting in the pay stack (# = position from the top)</span>
+      <span class="key"><span class="swatch k-paid"></span> paid — with date and check number</span>
+      <span class="key"><span class="swatch k-late"></span> past its due date, still unpaid</span>
+      <span class="key"><span class="swatch k-ghost"></span> expected from the radar — not seen yet</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

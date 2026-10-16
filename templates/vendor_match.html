@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Possible Vendor Match</h1>
+<p class="subtitle">This vendor name looks similar to one already on file — confirm before it's logged as a new spelling.</p>
+
+<div class="alert alert-warning" style="margin-bottom:20px;">
+  &#9888;&#65039; You entered <strong>{{ typed_vendor }}</strong>. We already have
+  <strong>{{ match.vendor }}</strong> on file — is it the same vendor?
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap;">
+  <form method="POST" action="/review/{{ scan_id }}/confirm?vendor_ok=1{% if filter_qs %}&{{ filter_qs[1:] }}{% endif %}">
+    {% for key, value in form_data.items(multi=True) %}
+      {% if key != 'vendor' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}
+    {% endfor %}
+    <input type="hidden" name="vendor" value="{{ match.vendor }}">
+    <button type="submit" class="btn btn-success">&#10003; Yes, same vendor &mdash; use "{{ match.vendor }}"</button>
+  </form>
+  <form method="POST" action="/review/{{ scan_id }}/confirm?vendor_ok=1{% if filter_qs %}&{{ filter_qs[1:] }}{% endif %}">
+    {% for key, value in form_data.items(multi=True) %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <button type="submit" class="btn btn-orange">No, this is a different vendor</button>
+  </form>
+  <a href="/review/{{ scan_id }}{{ filter_qs or '' }}" class="btn btn-ghost">&larr; Go Back &amp; Review</a>
+</div>
+{% endblock %}

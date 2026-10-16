@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1>Files</h1>
+  {% if here %}
+  <div style="display:flex;gap:8px;">
+    <button type="button" class="btn btn-ghost btn-sm" id="copy-path-btn" data-copy-path="{{ here_unc }}" title="Copy this folder's path (as every desk sees it)">Copy path</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="open-explorer-btn" style="display:none;" title="Open this folder in File Explorer on your desk">Open in Explorer</button>
+  </div>
+  {% endif %}
+</div>
+<p class="subtitle">The file cabinet, exactly as it is on the server &mdash; folders staff have filed into for 13 years, with what Klick Klack knows about each document. Browsing only: nothing here moves, renames, or deletes a file.</p>
+
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+  <nav style="font-size:.9rem;flex:1;min-width:240px;" aria-label="Folder path">
+    <a href="/files">Files</a>
+    {% for c in crumbs %} <span style="color:#999;">&rsaquo;</span>
+    {% if loop.last %}<strong>{{ c.name }}</strong>{% else %}<a href="/files?p={{ c.path|urlencode }}">{{ c.name }}</a>{% endif %}
+    {% endfor %}
+  </nav>
+  {% if here %}
+  <form method="GET" style="display:flex;gap:6px;">
+    <input type="hidden" name="p" value="{{ here }}">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search this folder&hellip;" style="width:200px;">
+    <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+    {% if q %}<a href="/files?p={{ here|urlencode }}" class="btn btn-ghost btn-sm">Clear</a>{% endif %}
+  </form>
+  {% endif %}
+</div>
+
+{% if q %}
+<div class="card"><div class="card-body" style="padding:0;">
+  <div style="padding:10px 20px;background:var(--gray);border-bottom:1px solid #ddd;font-size:.85rem;color:var(--mid);">
+    {{ files|length }} match{{ 'es' if files|length != 1 else '' }} for &ldquo;{{ q }}&rdquo; under this folder{% if truncated %} &mdash; first {{ files|length }} shown, narrow the search for the rest{% endif %}
+  </div>
+{% else %}
+{% if dirs %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-bottom:14px;">
+  {% for d in dirs %}
+  <a href="/files?p={{ d.path|urlencode }}" class="card" style="display:flex;align-items:center;gap:10px;padding:10px 14px;text-decoration:none;color:inherit;">
+    <span aria-hidden="true">&#128193;</span>
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ d.name }}">{{ d.name }}</span>
+    {% if d.count is not none %}<span style="font-size:.8rem;color:#999;">{{ d.count }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if at_roots %}{% if not dirs %}<p style="color:#999;">No browse roots are configured &mdash; check archive_folder in Settings.</p>{% endif %}{% else %}
+<div class="card"><div class="card-body" style="padding:0;">
+  <div style="padding:10px 20px;background:var(--gray);border-bottom:1px solid #ddd;font-size:.85rem;color:var(--mid);">
+    {{ files|length }} file{{ 's' if files|length != 1 else '' }}{% if more %} &mdash; and {{ more }} more not shown (this folder is huge; use search){% endif %}
+  </div>
+{% endif %}
+{% endif %}
+
+{% if here %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Modified</th><th>Size</th><th>Klick Klack record</th><th></th></tr></thead>
+    <tbody>
+    {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+    {% for f in files %}
+    <tr>
+      <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ f.name }}">
+        {% if f.is_pdf %}<a href="/files/open?p={{ f.path|urlencode }}" target="_blank" rel="noopener">{{ f.name }}</a>
+        {% else %}{{ f.name }}{% endif %}
+      </td>
+      <td style="white-space:nowrap;font-size:.85rem;">{{ f.mtime }}</td>
+      <td style="white-space:nowrap;font-size:.85rem;">{{ f.size }}</td>
+      <td>
+        {% if f.chip %}
+          {% if f.chip.kind == 'copy' %}
+            <a class="recno" href="/entry/{{ f.chip.id }}/view">copy of {{ f.chip.record_no or '#' ~ f.chip.id }}</a>
+          {% else %}
+            <a class="recno" href="/entry/{{ f.chip.id }}/view">{{ f.chip.record_no or '#' ~ f.chip.id }}</a>
+            <span class="badge-status {{ sc.get(f.chip.status, '') }}">{{ f.chip.status }}</span>
+            <span style="font-size:.8rem;color:var(--mid);">{{ f.chip.doc_type }}{% if f.chip.amount %} &middot; ${{ "{:,.2f}".format(f.chip.amount) }}{% endif %}</span>
+          {% endif %}
+        {% else %}<span style="font-size:.8rem;color:#999;">on disk only</span>{% endif %}
+      </td>
+      {# The copied path is the UNC one (report #22 bounce): this button used to
+         hand over f.path raw, which is the SERVER's F:\File-Cabinet\... — that
+         drive letter exists on the server alone, so the paste into File
+         Explorer failed on every desk. The /files/open link above still uses
+         the raw path: that one is resolved server-side, not by a person. #}
+      <td style="white-space:nowrap;"><button type="button" class="btn btn-ghost btn-sm js-copy-file" data-copy-path="{{ f.path|unc }}" title="Copy this file's path">Copy path</button></td>
+    </tr>
+    {% else %}<tr><td colspan="5" style="text-align:center;padding:30px;color:#999;">{% if q %}Nothing matches.{% else %}No files at this level &mdash; open a subfolder above.{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+</div></div>
+{% endif %}
+
+{% if here %}
+<p style="margin-top:10px;font-size:.8rem;color:#999;" id="unc-footer" data-unc="{{ here_unc }}">{{ here_unc }}</p>
+{% endif %}
+
+<script>
+(function(){
+  var unc = (document.getElementById('unc-footer')||{}).dataset ? document.getElementById('unc-footer').dataset.unc : '';
+  // Both Copy path buttons here (the folder's and each file's) are handled by
+  // the shared data-copy-path listener in _chrome_page_js.html.
+  var openBtn = document.getElementById('open-explorer-btn');
+  if (openBtn) {
+    fetch('/api/desk/status').then(function(r){ return r.json(); }).then(function(s){
+      if (s && s.commands) {
+        openBtn.style.display = '';
+        openBtn.addEventListener('click', function(){
+          fetch('/api/desk/open_explorer', {method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({path: unc})});
+        });
+      }
+    }).catch(function(){});
+  }
+})();
+</script>
+{% endblock %}

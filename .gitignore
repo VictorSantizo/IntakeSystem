@@ -1,0 +1,42 @@
+# ── Secrets — never commit ────────────────────────────────────────────────────
+# config.json holds the Claude API key, Gmail app password, and staff password
+# hashes. secret_key.txt signs Flask sessions. See config.example.json for shape.
+config.json
+config.json.bak*
+secret_key.txt
+
+# ── Live data (this folder IS production) ─────────────────────────────────────
+intake.db
+*.db
+*.db-shm
+*.db-wal
+current_batch.json
+*.log
+STARTUP_LOG.txt
+
+# ── Scanned documents / filed mail (financial docs, never in git) ─────────────
+Backups/
+Batch Covers/
+Email Scans/
+Filed/
+Test Scans/
+Unfiled Scans/
+Bug Reports/
+*.pdf
+*.meta.json
+
+# ── Bundled runtime & caches ──────────────────────────────────────────────────
+python/
+__pycache__/
+*.pyc
+
+# ── Machine-specific binaries (2026-07-27 review, GH #11) ─────────────────────
+# Windows shortcuts carry one desk's paths; the ScanSnap profile export lives on
+# the share for Connect My Scanner.bat to open, but is a binary blob git can't
+# meaningfully diff. Recreation steps are in SCANNER_SETUP.md.
+*.lnk
+*.sswp
+
+# ── Local tool state ──────────────────────────────────────────────────────────
+.claude/settings.local.json
+.claude/worktrees/

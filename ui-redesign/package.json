@@ -1,0 +1,9 @@
+{
+  "name": "klick-klack-redesign-sample",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Static UI redesign sample for Klick Klack (dashboard, review, pay, find, record).",
+  "scripts": {
+    "dev": "node dev-server.js"
+  }
+}

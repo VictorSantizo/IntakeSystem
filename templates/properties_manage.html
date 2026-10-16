@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1>&#127968; Properties</h1>
+  <a href="/settings" class="btn btn-ghost btn-sm">&larr; Settings</a>
+</div>
+<p class="subtitle">Add, edit, or remove properties. Changes take effect immediately.</p>
+
+{% if msg %}<div class="alert alert-info">&#10003; {{ msg }}</div>{% endif %}
+{% if err %}<div class="alert alert-warning">&#9888;&#65039; {{ err }}</div>{% endif %}
+
+{% macro entity_options(selected) %}
+  <option value="">— none —</option>
+  {% for e in cfg.entities %}<option value="{{ e.code }}" {{ 'selected' if selected == e.code else '' }}>{{ e.code }} — {{ e.name }}</option>{% endfor %}
+{% endmacro %}
+
+<div class="card" style="margin-bottom:20px;"><div class="card-header">Add Property</div><div class="card-body">
+  <form method="POST" action="/settings/properties/add" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="form-group" style="flex:0 0 130px;"><label>Code *</label><input type="text" name="code" placeholder="PP51" required></div>
+    <div class="form-group" style="flex:1;min-width:200px;"><label>Address *</label><input type="text" name="address" placeholder="24 E. Autumn Station Way" required></div>
+    <div class="form-group" style="flex:0 0 220px;"><label>Entity</label><select name="entity_code">{{ entity_options('') }}</select></div>
+    <div class="form-group" style="flex:1;min-width:160px;"><label>Note</label><input type="text" name="note" placeholder="optional"></div>
+    <button type="submit" class="btn btn-primary">+ Add</button>
+  </form>
+</div></div>
+
+<div class="card"><div class="card-header">Existing Properties ({{ properties|length }}) &middot; sorted by code</div>
+<div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+  <thead><tr><th>Code</th><th>Address</th><th>Entity</th><th>Note</th><th style="width:140px;"></th></tr></thead>
+  <tbody>
+  {% for p in properties %}
+  <tr>
+    <td><code>{{ p.code }}</code></td>
+    <td colspan="4" style="padding:0;">
+      <form method="POST" action="/settings/properties/{{ p.code }}/update" style="display:flex;gap:8px;align-items:center;margin:0;padding:6px 12px;">
+        <input type="text" name="address" value="{{ p.address }}" style="flex:2;min-width:180px;" required>
+        <select name="entity_code" style="flex:1;min-width:150px;">{{ entity_options(p.entity_code) }}</select>
+        <input type="text" name="note" value="{{ p.note or '' }}" placeholder="note" style="flex:1;min-width:120px;">
+        <button type="submit" class="btn btn-ghost btn-sm">Save</button>
+        <button type="submit" formaction="/settings/properties/{{ p.code }}/delete" class="btn btn-sm" style="background:#c00;color:#fff;"
+                formnovalidate data-property-code="{{ p.code }}"
+                onclick="return confirm('Delete property ' + this.dataset.propertyCode + '?')">&#128465;</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;padding:30px;color:#999;">No properties yet.</td></tr>{% endfor %}
+  </tbody></table></div></div></div>
+{% endblock %}

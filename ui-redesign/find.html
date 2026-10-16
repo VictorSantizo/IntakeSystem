@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klick Klack — Find</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="topbar">
+  <a class="wordmark" href="index.html">Klick Klack</a>
+  <nav>
+    <a href="index.html">Today</a>
+    <a href="review.html">Review</a>
+    <a href="pay.html">Pay</a>
+    <a href="find.html" class="here">Find</a>
+    <a href="#">The desk</a>
+  </nav>
+  <span class="who">Fri, Jul 31 · Karen</span>
+</div>
+<div class="wrap">
+
+  <div class="eyebrow">Find a record</div>
+  <h1>What do you remember about it?</h1>
+  <p class="sub">A vendor, a property, an amount, an account number — any one is enough. The search looks inside the documents too.</p>
+
+  <div class="search-big">
+    <input type="text" value="edison" aria-label="Search records">
+  </div>
+
+  <div class="panel">
+    <h2>4 records match "edison"</h2>
+    <div class="rows">
+      <a class="row" href="record.html">
+        <span class="recno">260721-002</span>
+        <span class="what"><b>SoCal Edison — TL222</b>
+          <span class="meta">bill · $147.48 · due Aug 12 · unpaid</span></span>
+        <span class="date">Jul 21</span>
+      </a>
+      <a class="row" href="record.html">
+        <span class="recno">260628-004</span>
+        <span class="what"><b>SoCal Edison — TL222</b>
+          <span class="meta">bill · $139.22 · paid Jul 8 · CK#13371</span></span>
+        <span class="date">Jun 28</span>
+      </a>
+      <a class="row" href="record.html">
+        <span class="recno">260524-001</span>
+        <span class="what"><b>SoCal Edison — TL222</b>
+          <span class="meta">bill · $152.06 · paid Jun 6 · CK#13340</span></span>
+        <span class="date">May 24</span>
+      </a>
+      <a class="row" href="record.html">
+        <span class="recno">260503-007</span>
+        <span class="what"><b>SoCal Edison — rate notice</b>
+          <span class="meta">correspondence · filed with May's bill · flagged</span></span>
+        <span class="date">May 3</span>
+      </a>
+    </div>
+  </div>
+
+  <details>
+    <summary>Narrow it down — status, entity, property, date range</summary>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-top:14px;">
+      <div class="field"><label>Status</label><select><option>Any</option><option>Unpaid</option><option>Paid</option><option>Filed</option></select></div>
+      <div class="field"><label>Entity</label><select><option>Any</option><option>TRUST1</option><option>TRUST2</option><option>TRUST3</option><option>PP</option></select></div>
+      <div class="field"><label>Property</label><input type="text" placeholder="TL222"></div>
+      <div class="field"><label>Received after</label><input type="date"></div>
+      <div class="field"><label>Received before</label><input type="date"></div>
+    </div>
+  </details>
+
+  <div class="actions">
+    <a href="#">Jump to a record number</a>
+    <a href="#">Browse the whole log</a>
+  </div>
+
+</div>
+</body>
+</html>

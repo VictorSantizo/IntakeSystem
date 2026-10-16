@@ -1,0 +1,27 @@
+flask>=3.0.0
+watchdog>=4.0.0
+pdfplumber>=0.11.0
+anthropic>=0.30.0
+pypdf>=4.0.0
+waitress>=3.0.0
+# Full-text indexing of image-only scans (Option B). PyMuPDF rasterizes pages;
+# pytesseract drives the Tesseract binary, which must be installed on the SERVER
+# separately (winget install UB-Mannheim.TesseractOCR). Text-layer PDFs index
+# via pdfplumber and need neither of these.
+PyMuPDF>=1.24.0
+pytesseract>=0.3.10
+# ocr.py imports PIL directly (not just via pytesseract) -- declare it explicitly
+# so a future pytesseract dependency change can't silently break OCR on a fresh install.
+Pillow>=10.0.0
+# pypdfium2 renders PDF page images for the classifier's vision fallback
+# (classifier.py, splitter.py) and the document page viewer (app.py). It fails
+# SOFT everywhere, so a fresh install without it silently loses those features
+# rather than crashing -- which is why it went undeclared for so long (GH #5).
+# Floor = the major line production actually runs (5.9.0); 4.x is untested here.
+pypdfium2>=5
+# Ships with flask, but secure_filename & friends are imported directly --
+# declare direct imports explicitly rather than riding a transitive dependency.
+werkzeug>=3.0.0
+# Same story: flask ships jinja2, but routes_newlook.py imports
+# TemplateNotFound directly for the new-look template fallback.
+jinja2>=3.0.0

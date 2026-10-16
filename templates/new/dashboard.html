@@ -1,0 +1,204 @@
+{% extends "new/base.html" %}
+{% block content %}
+{# The new-look dashboard (ui-redesign IMPLEMENTATION.md §4.1). Same data as
+   classic dashboard.html, calmer shape: a plain-language sentence, at most
+   three work rows, ONE filled button (the very next action), reference data
+   behind <details>, severity color only where action is required.
+   Live-update contract (kept from classic): the review row is ALWAYS in the
+   DOM (id="review-tile"/"review-count"/"review-sub"), hidden — not absent —
+   at zero, and styleReviewTile(n, urgent) keeps its name and signature; the
+   shared poller in _chrome_page_js.html calls it. #}
+{% set important_count = important|length %}
+{% set pass_count = my_passes|length %}
+{% set work_rows = (1 if overdue_count else 0) + (1 if pending_count else 0) + (1 if expected_waiting else 0) %}
+{% set glance_any = important_count or email_eyes or pass_count or email_junk_week %}
+{% set nothing_today = overdue_count == 0 and pending_count == 0 and expected_waiting == 0 and important_count == 0 and pass_count == 0 %}
+
+<div class="eyebrow">Today &middot; {{ today }}</div>
+{% if work_rows > 0 %}
+<h1>{{ {1:'One thing needs', 2:'Two things need', 3:'Three things need'}[work_rows] }} you.
+  {%- if overdue_count %} <em>One is time-sensitive.</em>{% endif %}</h1>
+<p class="sub">Everything else is filed, paid, or quietly waiting its turn. Work top to bottom and you're done.</p>
+{% elif not nothing_today %}
+<h1>Nothing needs a decision right now.</h1>
+<p class="sub">A few things below are worth a glance &mdash; no rush.</p>
+{% endif %}
+
+{% if nothing_today %}
+<div class="all-clear">
+  <div class="big">All caught up.</div>
+  <div class="why">Nothing waiting on review, nothing overdue, no missing bills. Nice.</div>
+</div>
+{% endif %}
+
+<div class="rows">
+  {% if overdue_count and overdue_count > 0 %}
+  {# Overdue rescue goes to the urgency-bucketed order; everything else keeps
+     Karen's pay-in-received-order default. #}
+  <a class="row urgent" href="/catchup?order=due">
+    <span class="n">{{ overdue_count }}</span>
+    <span class="what"><b>bill{{ 's' if overdue_count != 1 else '' }} past due</b>
+      <span class="meta">${{ "{:,.2f}".format(overdue_total) }} altogether</span></span>
+    <span class="go">catch up &rarr;</span>
+  </a>
+  {% endif %}
+
+  <a class="row {{ 'urgent' if urgent_pending > 0 else '' }}" href="/review" id="review-tile"
+     style="{{ 'display:none;' if pending_count == 0 else '' }}">
+    <span class="n" id="review-count">{{ pending_count }}</span>
+    <span class="what"><b>document{{ 's' if pending_count != 1 else '' }} to review</b>
+      <span class="meta" id="review-sub">{{ (urgent_pending|string + ' past due — review these first') if urgent_pending > 0 else 'scanned mail and email — a few minutes' }}</span></span>
+    <span class="go">start reviewing &rarr;</span>
+  </a>
+
+  {% if expected_waiting and expected_waiting > 0 %}
+  <a class="row" href="/expected">
+    <span class="n">{{ expected_waiting }}</span>
+    <span class="what"><b>expected bill{{ 's' if expected_waiting != 1 else '' }} ha{{ 've' if expected_waiting != 1 else 's' }}n't shown up</b>
+      <span class="meta">usually here by now this period &mdash; worth a look before it's overdue</span></span>
+    <span class="go">see which &rarr;</span>
+  </a>
+  {% endif %}
+</div>
+
+{# The ONE filled button: the very next concrete action. Oldest unpaid bill in
+   received order (Karen's rule) — or the review queue when there's nothing to
+   pay. Reassurance line underneath, always. #}
+{% if next_bill %}
+<a class="next" href="/catchup" data-kk="pay-next-bill">Pay the next bill &mdash; {{ next_bill.vendor or 'Unknown vendor' }}{% if next_bill.amount %} &middot; ${{ "{:,.2f}".format(next_bill.amount) }}{% endif %}
+  <small>oldest unpaid{% if next_bill.date_received %}, received {{ next_bill.date_received }}{% endif %} &mdash; you pay in received order, so nothing gets skipped</small></a>
+{% elif pending_count and pending_count > 0 %}
+<a class="next" href="/review">Check the new mail &mdash; {{ pending_count }} waiting
+  <small>the AI has read each one already &mdash; you just confirm; nothing is ever deleted</small></a>
+{% endif %}
+
+{% if glance_any %}
+<div class="panel" id="passed-to-you">
+  <h2>Worth a glance, no rush</h2>
+  <div class="rows">
+    {% for p in my_passes %}
+    <div class="row">
+      <span class="t plain">Passed</span>
+      <span class="what"><a class="recno" href="/entry/{{ p.entry_id }}/view">{{ p.record_no or '#' ~ p.entry_id }}</a> <b>{{ p.vendor or 'Record' }}</b>
+        <span class="meta">from {{ p.from_user or '?' }}{% if p.amount %} &middot; ${{ "{:,.2f}".format(p.amount) }}{% endif %}{% if p.entry_status %} &middot; {{ p.entry_status }}{% endif %}{% if p.note %} &middot; &ldquo;{{ p.note }}&rdquo;{% endif %}</span></span>
+      <form method="POST" action="/pass/{{ p.id }}/done" style="margin:0;">
+        <button type="submit" class="linklike" style="color:var(--sage);font-weight:600;" title="Mark this pass done">&#10003; done</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% for it in important %}
+    <a class="row" href="/entry/{{ it.id }}/view">
+      {% if it.notice_summary %}<span class="t legal" title="{{ it.notice_summary }}">Notice</span>
+      {% elif it.important %}<span class="t legal" title="{{ it.important_reason or 'Manually flagged important' }}">{{ it.doc_type or 'Flagged' }}</span>
+      {% else %}<span class="t legal">{{ it.doc_type }}</span>{% endif %}
+      <span class="what">{{ it.label or it.vendor or 'Untitled document' }}
+        <span class="meta">{% if it.notice_summary %}{{ it.notice_summary }}{% else %}{{ it.property_code or it.entity_code or '' }}{% endif %}</span></span>
+      <span class="date">{{ it.date_received }}</span>
+    </a>
+    {% endfor %}
+    {% for e in email_eyes %}
+    <a class="row" href="{{ '/review/' ~ e.sid if e.kind == 'queue' else '/entry/' ~ e.id ~ '/view' }}">
+      <span class="t email">Email</span>
+      <span class="what">{{ e.who }}
+        <span class="meta">{% if e.why %}{{ e.why }}{% endif %}{% if e.kind == 'queue' %}{% if e.why %} &middot; {% endif %}awaiting review{% endif %}</span></span>
+      <span class="date">{{ e.received }}</span>
+    </a>
+    {% endfor %}
+    {% if email_junk_week %}
+    <a class="row" href="/filtered">
+      <span class="t plain">Filtered</span>
+      <span class="what">{{ email_junk_week }} junk email doc{{ 's' if email_junk_week != 1 else '' }} set aside this week
+        <span class="meta">nothing is ever deleted &mdash; glance any time</span></span>
+      <span class="date">recoverable</span>
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="actions">
+  <a href="/review">Review new mail</a>
+  <a href="/catchup">Pay bills</a>
+  <a href="/log">Find a record</a>
+  <a href="/entry/new">Log something by hand</a>
+  <a href="/desk">The desk &mdash; your day as paper</a>
+</div>
+
+<div class="cream-box">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+    <p style="font-size:.95rem;">{{ period.label }}: <b style="font-family:var(--serif);font-weight:400;font-size:1.15rem;">{{ stats.total }}</b> document{{ 's' if stats.total != 1 else '' }} in &middot;
+      <b style="font-family:var(--serif);font-weight:400;font-size:1.15rem;">${{ "{:,.2f}".format(stats.total_bills) }}</b> billed &middot;
+      <b style="font-family:var(--serif);font-weight:400;font-size:1.15rem;">${{ "{:,.2f}".format(stats.total_income) }}</b> received</p>
+    <span style="font-size:.82rem;">
+      {% if not period.is_all and period.prev_month %}<a href="/?month={{ period.prev_month }}">&larr; earlier</a>{% endif %}
+      {% if not period.is_all and period.next_month %} <a href="/?month={{ period.next_month }}">later &rarr;</a>{% endif %}
+      {% if period.is_all %} <a href="/?full=1">this month</a>{% else %} <a href="/?range=all">all time</a>{% endif %}
+    </span>
+  </div>
+  {% set money_total = (stats.total_bills or 0) + (stats.total_income or 0) %}
+  {% if money_total > 0 %}
+  <div class="prop-bar">
+    <i style="width:{{ '%.0f'|format(100 * (stats.total_bills or 0) / money_total) }}%;background:var(--accent);"></i>
+    <i style="width:{{ '%.0f'|format(100 * (stats.total_income or 0) / money_total) }}%;background:var(--sage);"></i>
+  </div>
+  <div class="prop-legend">
+    <span><i style="background:var(--accent);"></i>bills</span>
+    <span><i style="background:var(--sage);"></i>income</span>
+  </div>
+  {% endif %}
+  <details>
+    <summary>Break down by entity and type</summary>
+    <table class="quiet" style="margin-top:12px;">
+      <tr><th>Entity</th><th class="num">Items</th><th class="num">Bills</th><th class="num">Income</th></tr>
+      {% for row in stats.by_entity %}
+      <tr class="clickable" onclick="location.href='/log?entity_code={{ row.entity_code }}&{{ period.qs }}'" title="View {{ row.entity_code }} records">
+        <td>{{ row.entity_name or row.entity_code or ('&mdash;'|safe) }}</td>
+        <td class="num">{{ row.cnt }}</td>
+        <td class="num">${{ "{:,.2f}".format(row.bills_amt) }}</td>
+        <td class="num">${{ "{:,.2f}".format(row.income_amt) }}</td>
+      </tr>
+      {% else %}<tr><td colspan="4" style="color:var(--ink-soft);text-align:center;">No data for {{ period.label }}</td></tr>{% endfor %}
+    </table>
+    <table class="quiet" style="margin-top:18px;">
+      <tr><th>Type</th><th class="num">Count</th><th class="num">Amount</th></tr>
+      {% for row in stats.by_type %}
+      <tr class="clickable" onclick="location.href='/log?doc_type={{ row.doc_type }}&{{ period.qs }}'">
+        <td>{{ row.doc_type or 'Unknown' }}</td>
+        <td class="num">{{ row.cnt }}</td>
+        <td class="num">${{ "{:,.2f}".format(row.total) }}</td>
+      </tr>
+      {% else %}<tr><td colspan="3" style="color:var(--ink-soft);text-align:center;">No data for {{ period.label }}</td></tr>{% endfor %}
+    </table>
+  </details>
+</div>
+
+<div class="panel">
+  <div class="section-label">Recent activity &nbsp;&middot;&nbsp; <a href="/activity" style="text-transform:none;letter-spacing:0;">view all &rarr;</a></div>
+  <div class="rows">
+    {% for a in activity[:5] %}
+    <div class="row" style="font-size:.87rem;color:var(--ink-soft);{% if a.entry_id %}cursor:pointer;{% endif %}"
+         {% if a.entry_id %}onclick="window.location.href='/entry/{{ a.entry_id }}/view'" title="Open record"{% endif %}>
+      <span class="date">{{ a.created_at }}</span>
+      <span class="what"><b style="color:var(--ink);">{{ a.user or 'System' }}</b> {{ a.action }}{% if a.detail %} &middot; {{ a.detail }}{% endif %}{% if a.vendor %} &middot; {{ a.vendor }}{% endif %}</span>
+    </div>
+    {% else %}
+    <div class="row" style="color:var(--ink-soft);">Nothing yet &mdash; logging a record, changing a status, or marking a bill paid shows up here.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+// Keep the "documents to review" row live — new scans arrive via the watcher
+// while the dashboard is open. Same contract as classic: show/hide the row,
+// swap urgent styling, update count + sub. The shared poller in
+// _chrome_page_js.html calls this every 10s.
+function styleReviewTile(n, urgent){
+  var t=document.getElementById('review-tile'); if(!t) return;
+  t.style.display = n===0 ? 'none' : '';
+  document.getElementById('review-count').textContent=n;
+  t.classList.toggle('urgent', urgent>0);
+  document.getElementById('review-sub').textContent =
+    urgent>0 ? (urgent+' past due — review these first') : 'scanned mail and email — a few minutes';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+{% set unpaid = entries | selectattr('status', 'ne', 'Paid') | selectattr('status', 'ne', 'Filed') | list %}
+{# Bills can be logged before anyone knows the amount (e.g. the manual-filing
+   harvest) — a NULL amount must read as $0 here, not crash the page (#21). #}
+{% set total_unpaid = unpaid | rejectattr('amount', 'none') | sum(attribute='amount') %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+  <div>
+    <h1>{{ vendor }}</h1>
+    <p class="subtitle">All bills &mdash; {{ unpaid|length }} unpaid, ${{ "{:,.2f}".format(total_unpaid) }} outstanding</p>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <a href="/bills" class="btn btn-ghost btn-sm">&larr; Back to Bills</a>
+    {% if unpaid %}
+    <button type="button" class="btn btn-primary" style="background:#1565C0;" onclick="document.getElementById('pay-all-modal').style.display='flex'">&#10003; Mark All as Paid</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if unpaid %}
+<div class="alert alert-warning" style="margin-bottom:16px;">
+  &#9888;&#65039; <strong>{{ unpaid|length }} unpaid bill{{ 's' if unpaid|length!=1 else '' }}</strong> totalling <strong>${{ "{:,.2f}".format(total_unpaid) }}</strong>
+  {% set overdue = unpaid | selectattr('due_date') | list %}
+  {% set overdue_list = [] %}
+  {% for e in overdue %}{% if e.due_date and e.due_date < today %}{% set _ = overdue_list.append(e) %}{% endif %}{% endfor %}
+  {% if overdue_list %}&nbsp;&middot;&nbsp; <span style="color:var(--red);font-weight:bold;">{{ overdue_list|length }} overdue</span>{% endif %}
+</div>
+{% endif %}
+
+{% set real_accts = accounts | rejectattr('account_number','equalto','(no account #)') | list %}
+{% if real_accts %}
+<div class="card" style="margin-bottom:16px;"><div class="card-header">&#128179; Accounts ({{ real_accts|length }})</div>
+<div class="card-body" style="padding:0;"><div class="table-wrap"><table class="sortable">
+  <thead><tr><th>Account #</th><th>Property</th><th>Entity</th><th>Unpaid</th><th>Amount Due</th><th>Next Due</th></tr></thead>
+  <tbody>
+  {% for a in real_accts %}
+  <tr>
+    <td style="font-weight:600;"><code>{{ a.account_number }}</code></td>
+    <td style="font-size:.85rem;"><code>{{ a.property_code or ('&mdash;'|safe) }}</code></td>
+    <td><code>{{ a.entity_code or ('&mdash;'|safe) }}</code></td>
+    <td>{{ a.unpaid_count }} <span style="color:var(--mid);font-size:.8rem;">/ {{ a.total_count }}</span></td>
+    <td class="amount">{% if a.amount_due %}${{ "{:,.2f}".format(a.amount_due) }}{% else %}&mdash;{% endif %}</td>
+    <td style="white-space:nowrap;font-size:.85rem;{% if a.next_due and a.next_due < today %}color:var(--red);font-weight:bold;{% endif %}">{{ a.next_due or ('&mdash;'|safe) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div></div></div>
+{% endif %}
+
+<div class="card"><div class="card-body" style="padding:0;">
+<table class="sortable">
+  <thead><tr><th>Due Date</th><th>Entity</th><th>Property</th><th>Bill Type</th><th>Amount</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+  <tbody>
+  {% set sc = {'Pending':'s-pending','In Progress':'s-in-progress','Processed':'s-processed','Paid':'s-paid','Filed':'s-filed','On Hold':'s-on-hold'} %}
+  {% for e in entries %}
+  <tr style="cursor:pointer;{% if e.status in ('Paid','Filed') %}opacity:.55;{% endif %}"
+      onclick="window.location.href='/entry/{{ e.id }}/view{{ nav_qs }}'" title="Click to view this record">
+    <td style="white-space:nowrap;font-weight:600;{% if e.due_date and e.due_date < today and e.status not in ('Paid','Filed') %}color:var(--red);{% endif %}">
+      {{ e.due_date or '—' }}
+      {% if e.due_date and e.due_date < today and e.status not in ('Paid','Filed') %}&#9888;{% endif %}
+    </td>
+    <td><code>{{ e.entity_code or '—' }}</code></td>
+    <td style="font-size:.82rem;"><code>{{ e.property_code or '—' }}</code></td>
+    <td style="font-size:.82rem;">{{ e.bill_type_code or '—' }}</td>
+    <td class="amount">${{ "{:,.2f}".format(e.amount) if e.amount else '—' }}</td>
+    <td onclick="event.stopPropagation()">
+      <select class="status-select" data-id="{{ e.id }}" style="border:none;background:none;font-size:.8rem;cursor:pointer;">
+        {% for st in ['Pending','In Progress','Processed','Paid','Filed','On Hold'] %}
+          <option value="{{ st }}" {{ 'selected' if e.status==st else '' }}>{{ st }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td style="font-size:.8rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ e.notes }}">{{ e.notes or '' }}</td>
+    <td onclick="event.stopPropagation()"><a href="/entry/{{ e.id }}/edit{{ nav_qs }}" class="btn btn-ghost btn-sm">Edit</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">No bills found for this vendor.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+
+{% if unpaid %}
+<div id="pay-all-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;">
+  <div class="card" style="width:420px;max-width:95vw;">
+    <div class="card-header" style="background:#1565C0;">&#10003; Mark All as Paid &mdash; {{ vendor }}</div>
+    <div class="card-body">
+      <p style="font-size:.88rem;color:var(--mid);margin-bottom:14px;">This will mark <strong>{{ unpaid|length }} bill{{ 's' if unpaid|length!=1 else '' }}</strong> totalling <strong>${{ "{:,.2f}".format(total_unpaid) }}</strong> as Paid.</p>
+      <form method="POST" action="/bills/vendor/{{ vendor | urlencode }}/pay_all">
+        <div class="form-grid">
+          <div class="form-group full"><label>Paid Date *</label><input type="date" name="paid_date" value="{{ today }}" required></div>
+          <div class="form-group full" style="font-size:.83rem;color:var(--mid);">Recorded as paid by <strong>{{ session.user }}</strong></div>
+          <div class="form-group full" style="display:flex;gap:8px;margin-top:4px;">
+            <button type="submit" class="btn btn-success">Confirm</button>
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('pay-all-modal').style.display='none'">Cancel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+// Picking "Paid" here opens the record's payment form instead of silently
+// flipping the status — see log.html for why (no other path from a bare
+// status dropdown ever recorded a paid date/amount/method).
+document.querySelectorAll('.status-select').forEach(sel => {
+  sel.addEventListener('change', function() {
+    if(this.value === 'Paid'){ window.location.href = '/entry/'+this.dataset.id+'/view?pay=1'; return; }
+    fetch(`/entry/${this.dataset.id}/status`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({status: this.value})
+    }).then(() => location.reload());
+  });
+});
+</script>
+{% endblock %}

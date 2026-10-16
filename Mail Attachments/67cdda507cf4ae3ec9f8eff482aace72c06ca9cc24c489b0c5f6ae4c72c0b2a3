@@ -1,0 +1,5 @@
+Reporting-MTA: dns; sonic-mta.mail.yahoo.com
+
+Final-Recipient: rfc822; assistklr2@gmail.com
+Action: failed
+Status: 5.0.0

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mail tray — Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<style>
+  :root{
+    --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+    --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+    --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+    --green:#2e6e3e; --red:#b03a2e; --blue-ink:#2e5aa8;
+    --sticky:#f7e896; --sticky-edge:#d9c65a;
+    --fresh:#fdfbf3; --aging:#f5ecc9; --stale:#eddfae;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f; }
+  }
+  :root[data-theme="dark"]{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f; }
+  :root[data-theme="light"]{ --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464; }
+
+  body{ background:var(--room); color:var(--room-ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+  .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+  .mono{ font-family:Consolas,"Courier New",monospace; }
+  a{ color:inherit; }
+  a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+    gap:18px; padding:10px 22px; flex-wrap:wrap; }
+  .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+  .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+  .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+  .nav .tabs .off{ color:#aebad2; }
+  .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+  .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+
+  .context{ max-width:1180px; margin:14px auto 0; padding:0 20px;
+    font-size:.82rem; color:var(--room-ink-soft); display:flex; gap:14px; flex-wrap:wrap; }
+  .context b{ color:var(--room-ink); }
+
+  .wrap{ max-width:1180px; margin:18px auto 26px; padding:0 20px; }
+  .panel{ background:var(--paper); border:2px solid var(--paper-edge); color:var(--ink);
+    padding:20px 26px; }
+  .panel h2{ font-family:Rockwell,"Rockwell Nova",Georgia,serif; font-size:1.25rem;
+    color:var(--wood-dark); margin:0 0 2px; }
+  .panel .sub{ font-size:.83rem; color:var(--pencil); margin:0 0 16px; }
+
+  /* ── the tray drawing ── */
+  .hero{ display:flex; gap:38px; flex-wrap:wrap; align-items:flex-end; }
+  .scene{ position:relative; }
+  .stackbox{ position:relative; width:210px; }
+  .stack{ display:flex; flex-direction:column-reverse; align-items:center;
+    position:relative; z-index:2; padding:0 10px; }
+  .sheet{ width:182px; height:2px; box-sizing:border-box;
+    border-bottom:1px solid rgba(90,74,48,.28); background:var(--fresh); }
+  .sheet.aging{ background:var(--aging); }
+  .sheet.stale{ background:var(--stale); }
+  .sheet{ position:relative; }
+  .sheet .utab{ position:absolute; right:-16px; top:-2px; width:16px; height:6px;
+    background:var(--red); }
+  .divider{ width:190px; height:3px; background:var(--navy); position:relative; }
+  .divider .dlabel{ position:absolute; right:calc(100% + 14px); top:-7px;
+    white-space:nowrap; font-size:.68rem; color:var(--pencil); }
+  .sheet.spill1{ transform:rotate(-4deg) translateX(-9px); }
+  .sheet.spill2{ transform:rotate(3deg) translateX(11px); }
+  .sheet.spill3{ transform:rotate(-2deg) translateX(4px); }
+
+  .walls{ position:absolute; bottom:0; left:0; right:0; z-index:3; pointer-events:none; }
+  .walls .base{ position:absolute; bottom:0; left:-6px; right:-6px; height:9px;
+    background:var(--wood); }
+  .walls .wl,.walls .wr{ position:absolute; bottom:0; width:9px; background:var(--wood); }
+  .walls .wl{ left:-6px; } .walls .wr{ right:-6px; }
+
+  .fill{ position:absolute; left:4px; right:4px; border-top:2px dashed var(--pencil);
+    z-index:4; opacity:.75; }
+  .fill .flabel{ position:absolute; left:calc(100% + 16px); top:-9px; white-space:nowrap;
+    font-size:.78rem; color:var(--pencil); }
+
+  .verdict{ text-align:center; margin-top:10px; font-size:1.05rem; color:var(--room-ink); }
+  .panel .verdict{ color:var(--ink); }
+
+  /* facts column */
+  .facts{ flex:1 1 300px; min-width:260px; display:flex; flex-direction:column; gap:10px;
+    padding-bottom:14px; }
+  .bignum{ font-family:Rockwell,"Rockwell Nova",Georgia,serif; font-size:2.3rem;
+    color:var(--wood-dark); line-height:1.1; }
+  .bignum small{ font-size:1.05rem; color:var(--pencil); font-family:"Segoe UI",system-ui,sans-serif; }
+  .factline{ font-size:.88rem; line-height:1.55; }
+  .factline b{ color:var(--wood-dark); }
+  .flow{ display:flex; gap:18px; font-size:.88rem; }
+  .flow .in{ color:var(--blue-ink); font-weight:700; }
+  .flow .out{ color:var(--green); font-weight:700; }
+  .acts{ display:flex; gap:16px; flex-wrap:wrap; font-size:.85rem; }
+  .acts a{ text-decoration:underline; text-underline-offset:3px; color:var(--wood-dark);
+    font-weight:600; }
+  .sticky{ background:var(--sticky); border-bottom:4px solid var(--sticky-edge);
+    padding:12px 13px; font-size:.92rem; line-height:1.45; color:#4a3d0c;
+    transform:rotate(-1.4deg); max-width:250px; }
+
+  .legend{ display:flex; gap:18px; flex-wrap:wrap; margin-top:18px; padding-top:12px;
+    border-top:2px solid var(--paper-edge); font-size:.78rem; color:var(--pencil); }
+  .legend .key{ display:flex; align-items:center; gap:7px; }
+  .k-tab{ width:16px; height:6px; background:var(--red); flex:none; }
+  .k-div{ width:26px; height:3px; background:var(--navy); flex:none; }
+  .k-age{ width:26px; height:10px; background:var(--aging); border:1px solid var(--paper-edge); flex:none; }
+  .k-fill{ width:26px; border-top:2px dashed var(--pencil); flex:none; }
+
+  /* shelf */
+  .shelf{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; padding:6px 2px 0; }
+  .shelf .dayt{ text-align:center; }
+  .shelf .dnum{ font-size:.72rem; color:var(--pencil); margin-top:4px; }
+  .shelf .dnum b{ color:var(--ink); }
+  .shelf .dnum .bad{ color:var(--red); font-weight:700; }
+  .shelf-note{ font-size:.8rem; color:var(--pencil); margin-top:12px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <span class="tabs">
+    <a class="sib" href="/desk">the desk</a>
+    <a class="sib" href="/cabinet">file cabinet</a>
+    <a class="sib" href="/rolodex">rolodex</a>
+    <a class="sib" href="/intray">in-tray</a>
+    <a class="sib" href="/calendar">wall calendar</a>
+    <a class="sib" href="/board">corkboard</a>
+    <span class="on">tray gauge</span>
+  </span>
+</nav>
+
+<div class="context">
+  <span>The Needs Review stack as an edge-on inbox tray — one sheet per document waiting. The number is the truth; the stack is the glance.</span>
+</div>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>The inbox tray, edge-on</h2>
+    <p class="sub">One sheet of paper per document waiting for review — the same count as
+      "documents waiting for review" on the dashboard. The number stays authoritative;
+      the stack is the glance.</p>
+
+    <div class="hero">
+      <div class="scene">
+        <div class="stackbox" id="hero-tray"></div>
+        {% if depth == 0 %}
+        <div class="verdict hand">the tray is empty</div>
+        {% else %}
+        <div class="verdict hand"{% if verdict == "flooded" %} style="color:var(--red);"{% endif %}>{{ verdict }} — {{ depth }} sheets deep</div>
+        {% endif %}
+      </div>
+
+      <div class="facts">
+        <div class="bignum">{{ depth }} <small>sheets waiting</small></div>
+
+        {% if depth == 0 %}
+        <div class="factline">Nothing waiting for review.</div>
+        {% else %}
+        {% set parts = [] %}
+        {% if oldest_label %}{% set parts = parts + ["Oldest landed <b>" + oldest_label + "</b>"] %}{% endif %}
+        {% if batch_groups %}{% set parts = parts + ["<b>" + (batch_groups|length|string) + "</b> batches in the tray"] %}{% endif %}
+        {% if urgent > 0 %}{% set parts = parts + ["<b style=\"color:var(--red);\">" + (urgent|string) + "</b> past-due bill" + ("s" if urgent != 1 else "") + " somewhere in this stack"] %}{% endif %}
+        <div class="factline">{{ parts|join(", ")|safe }}</div>
+        {% endif %}
+
+        <div class="flow">
+          <span class="in">+{{ landed_today }} landed today</span>
+          <span class="out">−{{ cleared_today }} cleared today</span>
+          {% if yesterday_depth is not none %}<span style="color:var(--pencil);">yesterday ended at {{ yesterday_depth }}</span>{% endif %}
+        </div>
+
+        <div class="acts">
+          <a href="/review">start reviewing →</a>
+          <a href="/catchup">catch up in received order →</a>
+          {% if urgent > 0 %}<a href="/catchup?order=due" style="color:var(--red);">pull the {{ urgent }} past-due first →</a>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="key"><span class="k-tab"></span> red tab = a bill already past due, still unreviewed</span>
+      <span class="key"><span class="k-div"></span> navy edge = a batch cover sheet (batch # · date received)</span>
+      <span class="key"><span class="k-age"></span> paper yellows with days waiting — same scale as the corkboard</span>
+      <span class="key"><span class="k-fill"></span> pencil lines = this office's own history (median close, triage line)</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>The last two weeks, end of day</h2>
+    <p class="sub">A shelf of yesterdays — how deep the tray was when the office closed.</p>
+    {% if history|length >= 2 %}
+    <div class="shelf" id="shelf"></div>
+    {% else %}
+    <p class="shelf-note">the shelf fills in as days pass — depth is recorded from today onward.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>var TRAY = {{ {"depth": depth, "urgent": urgent, "batches": batch_groups, "history": history, "normal": normal_line, "triage": triage_line}|tojson }};</script>
+<script>
+(function(){
+  // Build a tray edge-on. Batches are bottom-up (oldest first); sizes are sheet counts.
+  // scale = px per sheet; capacity = sheets the walls can hold before paper spills.
+  function tray(el, opts){
+    var scale = opts.scale, cap = opts.capacity;
+    var box = document.createElement('div');
+    box.className = 'stackbox';
+    box.style.width = opts.width + 'px';
+
+    var stack = document.createElement('div');
+    stack.className = 'stack';
+
+    var total = 0;
+    opts.batches.forEach(function(b){ total += b.size; });
+    var drawMax = opts.spill ? cap + Math.round(cap * 0.35) : total; // spill draws a bit past the walls, then stops
+    var urgent = opts.urgent || [];
+    var drawn = 0;
+
+    opts.batches.forEach(function(b){
+      for (var i = 0; i < b.size; i++){
+        if (drawn >= drawMax) return;
+        var s = document.createElement('div');
+        s.className = 'sheet' + (b.tint ? ' ' + b.tint : '');
+        s.style.height = scale + 'px';
+        s.style.width = (opts.width - 28) + 'px';
+        if (opts.spill && drawn >= cap){
+          s.className += ' spill' + ((drawn % 3) + 1);
+        } else {
+          // paper-edge jitter: texture only, +/-2px, deterministic
+          s.style.transform = 'translateX(' + [-2,0,2,1,-1][drawn % 5] + 'px)';
+        }
+        if (urgent.indexOf(drawn) !== -1){
+          var t = document.createElement('span');
+          t.className = 'utab';
+          t.style.height = Math.max(scale + 2, 5) + 'px';
+          s.appendChild(t);
+        }
+        stack.appendChild(s);
+        drawn++;
+      }
+      if (b.label && (!opts.spill || drawn < drawMax)){
+        var d = document.createElement('div');
+        d.className = 'divider';
+        d.style.width = (opts.width - 20) + 'px';
+        if (opts.labels){
+          var l = document.createElement('span');
+          l.className = 'dlabel';
+          l.textContent = b.label;
+          d.appendChild(l);
+        }
+        stack.appendChild(d);
+      }
+    });
+
+    var walls = document.createElement('div');
+    walls.className = 'walls';
+    var wallH = Math.round(cap * scale) + 9;
+    walls.innerHTML = '<span class="base"></span>' +
+      '<span class="wl" style="height:' + wallH + 'px"></span>' +
+      '<span class="wr" style="height:' + wallH + 'px"></span>';
+
+    box.appendChild(stack);
+    box.appendChild(walls);
+
+    (opts.fills || []).forEach(function(f){
+      var line = document.createElement('div');
+      line.className = 'fill';
+      line.style.bottom = Math.round(f.at * scale) + 'px';
+      if (f.label){
+        var fl = document.createElement('span');
+        fl.className = 'flabel';
+        fl.textContent = f.label;
+        line.appendChild(fl);
+      }
+      box.appendChild(line);
+    });
+
+    el.appendChild(box);
+    return box;
+  }
+
+  // capacity: the office's own triage line, plus a little headroom on the walls
+  var capacity = TRAY.triage + 15;
+
+  // map queue batch groups -> tray() batch shape {size, tint, label}
+  var heroBatches = (TRAY.batches || []).map(function(b){
+    return {
+      size: b.count,
+      tint: b.tint || '',
+      label: (b.batch_number === 'no batch')
+        ? ' '
+        : ('batch ' + b.batch_number + ' · ' + b.received_label)
+    };
+  });
+
+  // distribute the past-due tabs deterministically through the stack, starting near the bottom
+  var urgentIdx = [];
+  if (TRAY.urgent > 0 && TRAY.depth > 0){
+    var step = Math.max(1, Math.floor(TRAY.depth / TRAY.urgent));
+    for (var i = 0; i < TRAY.urgent; i++){
+      urgentIdx.push(Math.min(i * step, TRAY.depth - 1));
+    }
+  }
+
+  var heroEl = document.getElementById('hero-tray');
+  if (heroEl){
+    tray(heroEl, {
+      width: 210, scale: 4, capacity: capacity, labels: true,
+      batches: heroBatches,
+      urgent: urgentIdx,
+      spill: TRAY.depth > capacity,
+      fills: [
+        { at: TRAY.normal, label: 'a normal day ends here (' + TRAY.normal + ')' },
+        { at: TRAY.triage, label: 'backed up — triage line (' + TRAY.triage + ')' }
+      ]
+    });
+  }
+
+  // 14-day shelf: close-of-day depth, oldest first
+  var shelfEl = document.getElementById('shelf');
+  if (shelfEl && TRAY.history && TRAY.history.length){
+    TRAY.history.forEach(function(h){
+      var day = document.createElement('div');
+      day.className = 'dayt';
+      var depth = h.depth || 0;
+      tray(day, {
+        width: 46, scale: 0.9, capacity: capacity,
+        batches: [{ size: depth }],
+        urgent: [], spill: !!h.flood
+      });
+      var lab = document.createElement('div');
+      lab.className = 'dnum';
+      lab.innerHTML = h.label + '<br><b class="' + (h.flood ? 'bad' : '') + '">' + depth + '</b>';
+      day.appendChild(lab);
+      shelfEl.appendChild(day);
+    });
+  }
+})();
+</script>
+</body>
+</html>

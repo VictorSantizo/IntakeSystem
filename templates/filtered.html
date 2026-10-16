@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+  <h1>&#128462; Filtered Email</h1>
+  <div style="display:flex;gap:8px;">
+    <a href="/review" class="btn btn-ghost btn-sm">&larr; Needs Review</a>
+    {% if items %}
+    <form method="POST" action="/filtered/clear" style="margin:0;" onsubmit="return confirm('Discard all {{ items|length }} filtered item(s)? The files are moved to a _Trash folder, not deleted.')">
+      <button class="btn btn-sm" style="background:#c00;color:#fff;">&#128465; Discard all</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<p class="subtitle">Email attachments the AI judged were <em>not</em> bills. Nothing here is logged or deleted &mdash; rescue anything it got wrong, or discard the junk.</p>
+
+{% if not items %}
+<div class="alert alert-info">&#10003; Nothing filtered. Email attachments that look like bills go straight to Needs Review.</div>
+{% else %}
+<div style="display:grid;gap:14px;">
+{% for it in items %}
+<div class="card"><div class="card-body" style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+  <div style="font-size:2rem;">&#128196;</div>
+  <div style="flex:1;min-width:220px;">
+    <div style="font-weight:bold;color:var(--navy);">{{ it.file_name }}</div>
+    <div style="font-size:.83rem;color:var(--mid);margin-top:4px;">
+      AI: <strong>{{ it.doc_type or 'Other' }}</strong>
+      {% if it.vendor %} &middot; {{ it.vendor }}{% endif %}
+      {% if it.amount %} &middot; ${{ "{:,.2f}".format(it.amount) }}{% endif %}
+      &middot; <span class="conf-{{ (it.ai_confidence or 'none').lower() }}">{{ it.ai_confidence or 'None' }}</span>
+      &middot; {{ it.created_at }}
+    </div>
+    <div style="font-size:.8rem;color:var(--mid);margin-top:2px;">{{ it.reason }}</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;white-space:nowrap;">
+    <a href="#" onclick="openPdf('/filtered/preview/{{ it.id }}','Filtered #{{ it.id }}');return false;" class="btn btn-ghost btn-sm">View</a>
+    <form method="POST" action="/filtered/{{ it.id }}/review" style="margin:0;">
+      <button class="btn btn-success btn-sm" title="It's actually a bill — send it to Needs Review">&#8593; Send to Review</button>
+    </form>
+    <form method="POST" action="/filtered/{{ it.id }}/discard" style="margin:0;" onsubmit="return confirm('Discard {{ it.file_name }}? The file is moved to a _Trash folder, not deleted.')">
+      <button class="btn btn-sm" style="background:#c00;color:#fff;" title="Discard junk">&#128465;</button>
+    </form>
+  </div>
+</div></div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

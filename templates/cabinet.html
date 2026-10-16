@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File cabinet — Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<style>
+  :root{
+    --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464;
+    --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+    --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+    --green:#2e6e3e; --red:#b03a2e; --blue-ink:#2e5aa8;
+    --accent:#c96f2e;
+    --cab-bg:#3a352d; --cab-front:#4a4438; --cab-front-border:#2f2b23;
+    --cab-handle:#6b6354; --cab-ink:#cfc7b4; --cab-ink-soft:#9a917c;
+    --chip-paid-bg:#e2f0e4; --chip-paid-edge:#b9d9bd;
+    --chip-due-bg:#f7ecd2; --chip-due-edge:#e6cf9e; --chip-due-ink:#8a5a1e;
+    --chip-type-bg:#eee9df;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f; }
+  }
+  :root[data-theme="dark"]{ --room:#26211a; --room-ink:#d6cab2; --room-ink-soft:#a3987f; }
+  :root[data-theme="light"]{ --room:#e9dfc9; --room-ink:#4a4132; --room-ink-soft:#7d7464; }
+
+  body{ background:var(--room); color:var(--room-ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+  .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+  .mono{ font-family:Consolas,"Courier New",monospace; }
+  a{ color:inherit; }
+  a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  /* ── nav ── */
+  .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+    gap:18px; padding:10px 22px; flex-wrap:wrap; }
+  .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+  .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+  .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+  .nav .tabs .off{ color:#aebad2; }
+  .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+  .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+
+  .context{ max-width:1180px; margin:14px auto 0; padding:0 20px;
+    font-size:.82rem; color:var(--room-ink-soft); display:flex; gap:14px; flex-wrap:wrap; }
+  .context b{ color:var(--room-ink); }
+
+  /* ── cabinet layout ── */
+  .wrap{ max-width:1180px; margin:16px auto 30px; padding:0 20px; display:flex;
+    align-items:stretch; gap:0; }
+
+  /* ── left sidebar: the cabinet itself ── */
+  .sidebar{ flex:0 0 210px; background:var(--cab-bg); color:var(--cab-ink);
+    padding:18px 14px 16px; display:flex; flex-direction:column; box-sizing:border-box; }
+  .cab-heading{ font-size:.72rem; font-weight:700; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--cab-ink-soft); margin-bottom:14px; }
+  .drawers{ display:flex; flex-direction:column; gap:10px; }
+
+  .drawer{ display:block; text-decoration:none; color:inherit; background:var(--cab-front);
+    border:2px solid var(--cab-front-border); padding:9px 10px 8px; }
+  .drawer:hover{ background:#544d3e; }
+  .drawer.sel{ outline:2px solid var(--accent); outline-offset:1px; }
+  .d-plate{ background:var(--paper); color:var(--ink); font-size:.8rem;
+    padding:5px 8px; margin-bottom:7px; overflow-wrap:anywhere; }
+  .d-open{ color:var(--accent); font-size:.68rem; font-weight:700; margin-left:5px; }
+  .d-handle{ height:7px; width:56%; margin:0 auto; background:var(--cab-handle); }
+  .d-count{ font-size:.68rem; color:var(--cab-ink-soft); margin-top:6px; text-align:center; }
+
+  .wire-tray{ margin-top:18px; padding-top:14px; border-top:2px dashed var(--cab-handle); }
+  .wire-tray a{ display:block; text-decoration:none; color:inherit; background:#4a4438;
+    border:2px solid var(--cab-front-border); padding:9px 10px; }
+  .wire-tray a:hover{ background:#544d3e; }
+  .wt-title{ font-size:.74rem; font-weight:700; letter-spacing:.1em; color:var(--cab-ink); }
+  .wt-sub{ font-size:.72rem; color:var(--cab-ink-soft); margin-top:4px; }
+
+  /* ── main: the paper archive ── */
+  .main{ flex:1 1 auto; background:var(--paper); color:var(--ink);
+    padding:20px 26px 26px; box-sizing:border-box; min-width:0; }
+
+  .crumb{ display:inline-block; font-size:.78rem; color:var(--pencil);
+    background:#fff; border:1px solid var(--paper-edge); padding:5px 12px; }
+
+  .month-tabs{ display:flex; align-items:flex-end; gap:3px; flex-wrap:wrap;
+    margin:20px 0 0; }
+  .mtab{ font-size:.76rem; padding:6px 13px; border:1px solid var(--paper-edge);
+    border-bottom:none; background:var(--room); color:var(--room-ink-soft);
+    text-decoration:none; margin-bottom:-2px; }
+  .mtab:hover{ color:var(--wood-dark); }
+  .mtab.active{ background:var(--paper); color:var(--wood-dark); font-weight:700;
+    border-color:var(--wood); position:relative; z-index:2; }
+  .doc-count{ margin-left:auto; font-size:.8rem; color:var(--pencil); padding:0 4px 8px; }
+
+  .folder{ border:2px solid var(--wood); background:var(--paper); padding:16px;
+    position:relative; z-index:1; }
+
+  .doc-rows{ display:flex; flex-direction:column; gap:6px; }
+  .doc-row{ display:flex; justify-content:space-between; align-items:center; gap:12px;
+    background:#fff; border:1px solid var(--paper-edge); padding:8px 12px;
+    text-decoration:none; color:var(--ink); }
+  .doc-row:hover{ border-color:var(--wood); }
+  .doc-label{ font-size:.82rem; overflow-wrap:anywhere; }
+  .chip{ flex:none; font-size:.72rem; padding:3px 10px; border:1px solid; white-space:nowrap; }
+  .chip.paid{ background:var(--chip-paid-bg); color:var(--green); border-color:var(--chip-paid-edge); }
+  .chip.due{ background:var(--chip-due-bg); color:var(--chip-due-ink); border-color:var(--chip-due-edge); }
+  .chip.type{ background:var(--chip-type-bg); color:var(--pencil); border-color:var(--paper-edge); }
+
+  .empty-folder{ text-align:center; color:var(--pencil); font-size:1rem; padding:34px 10px; }
+
+  .folder-bottom{ display:flex; gap:16px; flex-wrap:wrap; align-items:center;
+    margin-top:16px; padding-top:14px; border-top:1px dashed var(--paper-edge); }
+  .dropzone{ flex:1 1 220px; border:2px dashed var(--wood); text-align:center;
+    padding:14px 10px; color:var(--wood-dark); text-decoration:none; font-size:.85rem; }
+  .dropzone:hover{ background:#fff; }
+  .search-form{ display:flex; align-items:center; gap:6px; font-size:.82rem; color:var(--pencil); }
+  .search-form input{ font-family:Consolas,"Courier New",monospace; font-size:.82rem;
+    padding:5px 8px; border:1px solid var(--paper-edge); width:220px; }
+  .search-form button{ background:var(--paper); border:2px solid var(--wood); color:var(--wood-dark);
+    font-weight:700; padding:5px 12px; cursor:pointer; }
+  .search-form button:hover{ background:#fff; }
+
+  @media (max-width:700px){
+    .wrap{ flex-direction:column; }
+    .sidebar{ flex:0 0 auto; width:100%; }
+    .doc-count{ margin-left:0; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <span class="tabs">
+    <a class="sib" href="/desk">the desk</a>
+    <span class="on">file cabinet</span>
+    <a class="sib" href="/rolodex">rolodex</a>
+    <a class="sib" href="/intray">in-tray</a>
+    <a class="sib" href="/calendar">wall calendar</a>
+    <a class="sib" href="/board">corkboard</a>
+    <a class="sib" href="/tray">tray gauge</a>
+  </span>
+</nav>
+
+<div class="context">
+  <span>Every document ever logged, filed by entity and month — the same archive Karen has kept on paper for 13 years, now findable in seconds. Nothing here is ever deleted, only refiled.</span>
+</div>
+
+<div class="wrap">
+  <div class="sidebar">
+    <div class="cab-heading">the cabinet</div>
+    <div class="drawers">
+      {% for d in drawers %}
+        <a class="drawer{{ ' sel' if d.code == sel else '' }}" href="/cabinet?entity={{ d.code|urlencode }}">
+          <div class="d-plate mono">{{ d.code or 'unsorted' }}{% if d.code == sel %}<span class="d-open">&#9668; open</span>{% endif %}</div>
+          <div class="d-handle"></div>
+          <div class="d-count">{{ d.count }} doc{{ 's' if d.count != 1 }}</div>
+        </a>
+      {% endfor %}
+    </div>
+
+    <div class="wire-tray">
+      <a href="/tray">
+        <div class="wt-title mono">wire tray</div>
+        <div class="wt-sub">unfiled: {{ queue_depth }} sheet{{ 's' if queue_depth != 1 }}</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="crumb mono">Files &rsaquo; {{ year }} &rsaquo; {{ sel or 'UNSORTED' }} &rsaquo; {{ ym_label }}</div>
+
+    <div class="month-tabs">
+      {% for m in months %}
+        <a class="mtab{{ ' active' if m.ym == ym else '' }}" href="/cabinet?entity={{ sel|urlencode }}&month={{ m.ym }}">{{ m.label }}</a>
+      {% endfor %}
+      <span class="doc-count">{{ docs|length }} documents in this folder</span>
+    </div>
+
+    <div class="folder">
+      {% if docs %}
+        <div class="doc-rows">
+          {% for d in docs %}
+            <a class="doc-row" href="/entry/{{ d.id }}/view">
+              <span class="doc-label mono">{{ d.label }}</span>
+              <span class="chip {{ d.chip_kind }}">{{ d.chip }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-folder hand">nothing filed under {{ sel or 'unsorted' }} in {{ ym_label }}</div>
+      {% endif %}
+
+      <div class="folder-bottom">
+        <a class="dropzone" href="/review" title="scans are filed from Needs Review">Drop a scan here to file it</a>
+        <form class="search-form" method="GET" action="/log">
+          <label for="cab-search">or search:</label>
+          <input type="text" id="cab-search" name="search" placeholder="CK#13386, vendor, amount…">
+          <button type="submit">go</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

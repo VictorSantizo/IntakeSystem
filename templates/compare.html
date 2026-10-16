@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_dup_compare.html" import dup_compare, dup_summary, source_badge %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+  <h1>&#128269; Side-by-Side Duplicate Check</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="/review/{{ scan_id }}{{ filter_qs or '' }}" class="btn btn-ghost btn-sm">&larr; Back to review</a>
+    <a href="/entry/{{ entry.id }}/view" target="_blank" class="btn btn-ghost btn-sm">Open record {{ entry.record_no or '#' ~ entry.id }}</a>
+    <form method="POST" action="/review/{{ scan_id }}/attach/{{ entry.id }}{{ filter_qs or '' }}" style="margin:0;"
+          onsubmit="return confirm('Attach this scan to record {{ entry.record_no or '#' ~ entry.id }} as a duplicate copy? It will NOT create a new entry.')">
+      <button type="submit" class="btn btn-success btn-sm">&#128206; It's the same bill &mdash; attach as copy</button>
+    </form>
+  </div>
+</div>
+<p class="subtitle" style="margin-bottom:10px;">{{ dup_summary(cmp) }}</p>
+{% if cmp.verdict.reason %}
+<p style="font-size:.88rem;color:var(--mid);margin:0 0 10px;">{{ cmp.verdict.reason }}</p>
+{% endif %}
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:.8rem;color:var(--mid);margin-bottom:12px;">
+  <div>
+    Boxes on the documents:&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border:2.5px solid #2E7D32;background:rgba(46,125,50,.16);border-radius:3px;vertical-align:-2px;"></span> value matches the other copy &nbsp;&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border:2.5px solid #C62828;background:rgba(198,40,40,.16);border-radius:3px;vertical-align:-2px;"></span> meaningfully different &nbsp;&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border:2.5px dashed #9E9E9E;background:rgba(158,158,158,.14);border-radius:3px;vertical-align:-2px;"></span> differs, but normal for a second copy
+  </div>
+  <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;white-space:nowrap;"
+         title="Scrolling one document scrolls the other to the same relative spot. Untick if the two copies are laid out very differently.">
+    <input type="checkbox" id="sync-scroll" checked style="width:15px;height:15px;">&#128279; Scroll together
+  </label>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+  <div class="card">
+    <div class="card-header">&#128229; This document (in review) &nbsp;{{ source_badge(data) }}
+      <span style="float:right;font-weight:normal;font-size:.75rem;opacity:.85;">{{ (data.pdf_path or '').split('\\')[-1] }}</span></div>
+    <div style="padding:6px 12px;border-bottom:1px solid #eee;font-size:.72rem;font-family:Consolas,monospace;color:var(--mid);word-break:break-all;">
+      {{ (data.pdf_path|unc) or '(no file path)' }}
+      {% if data.pdf_path %}<button type="button" class="btn btn-ghost btn-sm" style="font-family:inherit;" data-copy-path="{{ data.pdf_path|unc }}">Copy path</button>{% endif %}
+    </div>
+    <div class="card-body" style="padding:0;height:76vh;">
+      <div id="pane-scan" style="height:100%;overflow:auto;background:#666;padding:10px;"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">&#128451; Record {{ entry.record_no or '#' ~ entry.id }} ({{ entry.status }}) &nbsp;{{ source_badge(entry) }}
+      <span style="float:right;font-weight:normal;font-size:.75rem;opacity:.85;">{{ ((entry.filed_path or entry.pdf_path or '')).split('\\')[-1] }}</span></div>
+    <div style="padding:6px 12px;border-bottom:1px solid #eee;font-size:.72rem;font-family:Consolas,monospace;color:var(--mid);word-break:break-all;">
+      {{ ((entry.filed_path or entry.pdf_path)|unc) or '(no file path)' }}
+      {% if entry.filed_path or entry.pdf_path %}<button type="button" class="btn btn-ghost btn-sm" style="font-family:inherit;" data-copy-path="{{ (entry.filed_path or entry.pdf_path)|unc }}">Copy path</button>{% endif %}
+    </div>
+    <div class="card-body" style="padding:0;height:76vh;">
+      <div id="pane-entry" style="height:100%;overflow:auto;background:#666;padding:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <div class="card-header">The details, side by side</div>
+  <div class="card-body">
+    {{ dup_compare(cmp, "This document", "Record " ~ (entry.record_no or '#' ~ entry.id)) }}
+  </div>
+</div>
+
+<script>
+// Copy path (reports #92 / #22) is the app-wide data-copy-path handler in
+// _chrome_page_js.html — nothing page-specific needed here.
+
+// Render one document as page images with ALWAYS-ON boxes around the compared
+// characteristics, colored by whether they match the other copy. Falls back to
+// a plain PDF iframe when the document has no text layer to locate values in.
+function initComparePane(opts){
+  var viewer = document.getElementById(opts.viewer);
+  if(!viewer) return;
+  var STYLE = {same:     ['#2E7D32', 'rgba(46,125,50,.16)',  'solid'],
+               diff:     ['#C62828', 'rgba(198,40,40,.16)',  'solid'],
+               expected: ['#9E9E9E', 'rgba(158,158,158,.14)','dashed']};
+  viewer.innerHTML = '<div style="padding:30px;text-align:center;color:#eee;">Loading document…</div>';
+  var fellBack = false;
+  function fallback(){
+    if(fellBack) return; fellBack = true;
+    viewer.style.padding = '0';
+    viewer.innerHTML = '<iframe src="' + opts.fallback + '" style="width:100%;height:100%;border:none;background:#fff;"></iframe>';
+  }
+  fetch(opts.hlUrl).then(function(r){ return r.ok ? r.json() : null; }).then(function(hl){
+    if(!hl || !hl.ok || !hl.pages){ fallback(); return; }
+    viewer.innerHTML = '';
+    for(var p = 1; p <= hl.pages; p++){
+      var wrap = document.createElement('div');
+      wrap.style.position = 'relative';
+      wrap.style.margin = '0 0 10px';
+      wrap.dataset.page = p;
+      var img = document.createElement('img');
+      img.style.width = '100%'; img.style.display = 'block';
+      img.style.borderRadius = '4px';
+      if(p > 1) img.loading = 'lazy'; else img.onerror = fallback;
+      img.src = opts.pageUrl + p;
+      wrap.appendChild(img); viewer.appendChild(wrap);
+    }
+    var fields = hl.fields || {};
+    Object.keys(fields).forEach(function(f){
+      var st = STYLE[opts.states[f] || 'expected'];
+      fields[f].forEach(function(b){
+        var wrap = viewer.querySelector('[data-page="' + b.page + '"]');
+        if(!wrap) return;
+        var d = document.createElement('div');
+        d.style.position = 'absolute';
+        d.style.left   = (b.x0 * 100 - 0.5) + '%';
+        d.style.top    = (b.top * 100 - 0.3) + '%';
+        d.style.width  = (Math.max(b.x1 - b.x0, 0.004) * 100 + 1) + '%';
+        d.style.height = (Math.max(b.bottom - b.top, 0.004) * 100 + 0.6) + '%';
+        d.style.border = '2.5px ' + st[2] + ' ' + st[0];
+        d.style.background = st[1];
+        d.style.borderRadius = '4px';
+        d.style.pointerEvents = 'none';
+        d.title = f.replace('_', ' ');
+        wrap.appendChild(d);
+      });
+    });
+  }).catch(fallback);
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var states = {{ box_states|tojson }};
+  initComparePane({viewer:'pane-scan',
+                   hlUrl:'/review/{{ scan_id }}/highlights',
+                   pageUrl:'/review/{{ scan_id }}/page/',
+                   fallback:'/scan/preview/{{ scan_id }}',
+                   states: states});
+  initComparePane({viewer:'pane-entry',
+                   hlUrl:'/entry/{{ entry.id }}/highlights',
+                   pageUrl:'/entry/{{ entry.id }}/page/',
+                   fallback:'/entry/{{ entry.id }}/pdf',
+                   states: states});
+
+  // Scroll the two documents together, proportionally — at 30% down one,
+  // the other sits at 30% too, so different page counts still track. The
+  // `driving` latch stops the induced scroll event from echoing back and
+  // fighting the user. (A pane that fell back to a PDF iframe doesn't scroll
+  // as a div, so syncing is simply inert for it.)
+  var syncBox = document.getElementById('sync-scroll');
+  var panes = [document.getElementById('pane-scan'), document.getElementById('pane-entry')];
+  var driving = null;
+  panes.forEach(function(p, i){
+    p.addEventListener('scroll', function(){
+      if(!syncBox.checked) return;
+      if(driving !== null && driving !== p) return;   // echo from the other pane
+      driving = p;
+      var other = panes[1 - i];
+      var max = p.scrollHeight - p.clientHeight;
+      var omax = other.scrollHeight - other.clientHeight;
+      if(max > 0 && omax > 0){
+        other.scrollTop = (p.scrollTop / max) * omax;
+      }
+      requestAnimationFrame(function(){ driving = null; });
+    });
+  });
+});
+</script>
+{% endblock %}

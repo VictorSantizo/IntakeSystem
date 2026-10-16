@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The desk — Klick Klack</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<style>
+  :root{
+    --room:#6b4f35; --room-ink:#f3ead9; --room-ink-soft:#d9c7ab;
+    --paper:#fdfbf3; --paper-edge:#d8cfb8; --ink:#2b2b2b; --pencil:#7d7464;
+    --navy:#1F3864; --wood:#7a5c3e; --wood-dark:#5d4530;
+    --green:#2e6e3e; --red:#b03a2e; --blue-ink:#2e5aa8;
+    --sticky:#f7e896; --sticky-edge:#d9c65a;
+    --pink:#f5c6d8; --pink-edge:#d295ab;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --room:#4a3620; --room-ink:#ecdfc4; --room-ink-soft:#c2ac86; }
+  }
+  :root[data-theme="dark"]{ --room:#4a3620; --room-ink:#ecdfc4; --room-ink-soft:#c2ac86; }
+  :root[data-theme="light"]{ --room:#6b4f35; --room-ink:#f3ead9; --room-ink-soft:#d9c7ab; }
+
+  body{ background:var(--room); color:var(--room-ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; margin:0; }
+  .hand{ font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive; }
+  .mono{ font-family:Consolas,"Courier New",monospace; }
+  a{ color:inherit; }
+  a:focus-visible, button:focus-visible{ outline:3px solid var(--blue-ink); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  /* ── nav ── */
+  .nav{ background:var(--navy); color:#fff; display:flex; align-items:center;
+    gap:18px; padding:10px 22px; flex-wrap:wrap; }
+  .nav .brand{ font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
+  .nav .tabs{ display:flex; gap:4px; flex-wrap:wrap; font-size:.85rem; }
+  .nav .tabs span, .nav .tabs a{ padding:4px 11px; border-radius:4px 4px 0 0; text-decoration:none; }
+  .nav .tabs .off{ color:#aebad2; }
+  .nav .tabs .on{ background:var(--paper); color:var(--navy); font-weight:700; }
+  .nav .tabs a.sib{ color:#dbe4f5; text-decoration:underline; text-underline-offset:3px; }
+  .nav .today{ margin-left:auto; font-size:.85rem; color:#dbe4f5; }
+
+  .context{ max-width:1180px; margin:14px auto 0; padding:0 20px;
+    font-size:.82rem; color:var(--room-ink-soft); display:flex; gap:14px; flex-wrap:wrap; }
+  .context b{ color:var(--room-ink); }
+
+  /* ── the desk surface ── */
+  .desk-wrap{ max-width:1180px; margin:20px auto 10px; padding:0 20px; }
+  .desk-row{ display:flex; flex-wrap:wrap; gap:28px; align-items:flex-start; }
+
+  .pile{ flex:1 1 240px; max-width:280px; display:block; text-decoration:none; color:inherit; }
+  .pile-stage{ position:relative; min-height:196px; padding-bottom:6px; }
+
+  .pile-empty{ border:2px dashed var(--room-ink-soft); color:var(--room-ink-soft);
+    min-height:196px; display:flex; align-items:center; justify-content:center;
+    text-align:center; font-size:.85rem; padding:10px; }
+
+  .caption{ background:var(--paper); color:var(--wood-dark); border:1px solid var(--paper-edge);
+    border-top:3px solid var(--wood); font-size:.78rem; font-weight:700; text-align:center;
+    padding:6px 8px; margin-top:8px; }
+  .pile:hover .caption{ background:#fff; }
+
+  /* — pile 1: IN, the cover sheet — */
+  .cover-sheet{ background:var(--paper); border:1px solid var(--paper-edge); color:var(--ink);
+    padding:14px 13px; position:relative; z-index:3; }
+  .cover-sheet .c-head{ font-size:.66rem; letter-spacing:.07em; font-weight:700;
+    color:var(--wood-dark); border-bottom:1px dashed var(--paper-edge);
+    padding-bottom:7px; margin-bottom:9px; }
+  .cover-sheet .c-date{ display:inline-block; font-size:1.1rem; font-weight:700;
+    border:2px dashed var(--pencil); padding:3px 12px; margin-bottom:8px; transform:rotate(-1deg); }
+  .cover-sheet .c-sub{ font-size:.78rem; color:var(--pencil); }
+  .cover-sheet .c-none{ font-size:.85rem; color:var(--pencil); font-style:italic; padding:14px 0; }
+  /* The strips below are fixed decoration only — a suggestion of the pile underneath.
+     Their count/height are not data-bearing; only pending_count drives real numbers. */
+  .pile-strips{ position:relative; }
+  .strip{ background:var(--paper); border:1px solid var(--paper-edge); height:10px;
+    margin:2px 16px 0; }
+  .strip.s1{ transform:translateX(5px) rotate(-1.1deg); }
+  .strip.s2{ transform:translateX(-6px) rotate(0.9deg); }
+  .strip.s3{ transform:translateX(2px) rotate(-0.4deg); }
+
+  /* — pile 2: TO PAY, the bill face-up — */
+  .bill-face{ background:var(--paper); border:1px solid var(--paper-edge); color:var(--ink);
+    padding:14px 13px; position:relative; min-height:196px; }
+  .bill-face .b-vendor{ font-weight:700; font-size:.95rem; margin-bottom:2px; }
+  .bill-face .b-amt{ font-family:Rockwell,"Rockwell Nova",Georgia,serif; font-size:1.3rem;
+    color:var(--wood-dark); line-height:1.15; }
+  .bill-face .b-due{ font-size:.8rem; color:var(--pencil); margin-top:2px; }
+  .bill-face .b-more{ font-size:.74rem; color:var(--pencil); margin-top:10px; }
+  .bill-face .b-none{ font-size:.85rem; color:var(--pencil); font-style:italic;
+    display:flex; align-items:center; justify-content:center; min-height:170px; }
+  .stamp-recd{ display:inline-block; border:2px solid var(--red); color:var(--red);
+    font-size:.68rem; font-weight:700; letter-spacing:.03em; padding:2px 8px;
+    transform:rotate(-6deg); margin-top:10px; }
+  .stamp-payfirst{ display:inline-block; border:2px solid var(--red); color:var(--red);
+    font-size:.78rem; font-weight:700; letter-spacing:.04em; padding:3px 10px;
+    transform:rotate(4deg); margin-top:8px; margin-left:6px; }
+
+  /* — pile 3: IMPORTANT, the clipboard — */
+  .clipboard{ background:var(--wood); border:3px solid var(--wood-dark); padding:20px 10px 12px;
+    position:relative; min-height:196px; box-sizing:border-box; }
+  .clip-metal{ position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    width:56px; height:16px; background:var(--wood-dark); border:2px solid #3f2f1c; }
+  .clip-sheet{ background:var(--paper); color:var(--ink); padding:10px 10px 8px; min-height:150px; }
+  .clip-item{ font-size:.8rem; padding:5px 0; border-bottom:1px dashed var(--paper-edge); }
+  .clip-item:last-child{ border-bottom:none; }
+  .clip-item .ci-label{ font-weight:700; }
+  .clip-item .ci-sub{ font-size:.72rem; color:var(--pencil); margin-top:1px; }
+  .clip-more{ font-size:.74rem; color:var(--pencil); padding-top:6px; }
+  .clip-none{ font-size:.85rem; color:var(--pencil); font-style:italic;
+    display:flex; align-items:center; justify-content:center; min-height:150px; }
+
+  /* — pile 4: FILED, the tray — */
+  .filed-tray{ border:2px solid var(--wood); border-top-width:8px; background:var(--paper);
+    color:var(--ink); padding:18px 14px; min-height:196px; box-sizing:border-box;
+    display:flex; flex-direction:column; justify-content:center; gap:8px; }
+  .filed-tray .f-line1{ font-size:1rem; font-weight:700; color:var(--wood-dark); }
+  .filed-tray .f-line2{ font-size:.85rem; color:var(--pencil); }
+
+  /* ── sticky notes ── */
+  .stickies{ max-width:1180px; margin:26px auto 30px; padding:0 20px;
+    display:flex; flex-wrap:wrap; gap:22px; }
+  .sticky-note{ background:var(--sticky); border-bottom:4px solid var(--sticky-edge);
+    color:#4a3d0c; padding:14px 15px; font-size:.94rem; line-height:1.45;
+    max-width:270px; flex:1 1 220px; }
+  .sticky-note a{ text-decoration:underline; text-underline-offset:2px; font-weight:700; }
+  .sticky-note:nth-child(odd){ transform:rotate(-1.6deg); }
+  .sticky-note:nth-child(even){ transform:rotate(1.4deg); background:var(--pink);
+    border-bottom-color:var(--pink-edge); color:#5a2a3c; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">Klick Klack</span>
+  <span class="tabs">
+    <span class="on">the desk</span>
+    <a class="sib" href="/cabinet">file cabinet</a>
+    <a class="sib" href="/rolodex">rolodex</a>
+    <a class="sib" href="/intray">in-tray</a>
+    <a class="sib" href="/calendar">wall calendar</a>
+    <a class="sib" href="/board">corkboard</a>
+    <a class="sib" href="/tray">tray gauge</a>
+  </span>
+  <span class="today">{{ today_label }}</span>
+</nav>
+
+<div class="context">
+  <span>Your desk — every pile is live. Click a pile to work it.</span>
+</div>
+
+<div class="desk-wrap">
+  <div class="desk-row">
+
+    <!-- PILE 1: IN -->
+    <a class="pile" href="/review">
+      <div class="pile-stage">
+        {% if pending_count == 0 %}
+          <div class="pile-empty">empty — all mail reviewed</div>
+        {% else %}
+          <div class="cover-sheet mono">
+            {% if top_batch %}
+              <div class="c-head">MAIL BATCH COVER SHEET</div>
+              <div class="c-date">{{ top_batch.received_label }}</div>
+              <div class="c-sub">{{ top_batch.count }} piece{{ 's' if top_batch.count != 1 else '' }} under this sheet</div>
+            {% else %}
+              <div class="c-head">MAIL BATCH COVER SHEET</div>
+              <div class="c-none">no cover sheet on top</div>
+            {% endif %}
+          </div>
+          <div class="pile-strips">
+            <div class="strip s1"></div>
+            <div class="strip s2"></div>
+            <div class="strip s3"></div>
+          </div>
+        {% endif %}
+      </div>
+      <div class="caption">IN — new mail ({{ pending_count }})</div>
+    </a>
+
+    <!-- PILE 2: TO PAY -->
+    <a class="pile" href="/catchup">
+      <div class="pile-stage">
+        {% if top_bill %}
+          <div class="bill-face">
+            <div class="b-vendor">{{ top_bill.vendor or '(no vendor)' }}</div>
+            <div class="b-amt">${{ '{:,.2f}'.format(top_bill.amount or 0) }}</div>
+            <div class="b-due">due {{ top_bill.due_date or '—' }}</div>
+            <div class="stamp-recd">REC'D {{ top_bill.date_received or '—' }}</div>
+            <span class="stamp-payfirst">PAY FIRST</span>
+            {% if stack_count > 1 %}
+              <div class="b-more">{{ stack_count - 1 }} more behind it</div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="bill-face">
+            <div class="b-none">nothing to pay</div>
+          </div>
+        {% endif %}
+      </div>
+      <div class="caption">TO PAY — oldest first &middot; ${{ '{:,.2f}'.format(stack_total or 0) }}</div>
+    </a>
+
+    <!-- PILE 3: IMPORTANT -->
+    <a class="pile" href="/board">
+      <div class="pile-stage">
+        <div class="clipboard">
+          <div class="clip-metal"></div>
+          {% if board_top %}
+            <div class="clip-sheet">
+              {% for it in board_top %}
+                <div class="clip-item">
+                  <div class="ci-label mono">{{ it.label or it.vendor or it.doc_type or 'document' }}</div>
+                  <div class="ci-sub">{{ it.doc_type or '—' }} &middot; {{ it.date_received or '—' }}</div>
+                </div>
+              {% endfor %}
+              {% if board_count > 2 %}
+                <div class="clip-more">+{{ board_count - 2 }} more on the corkboard</div>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="clip-sheet">
+              <div class="clip-none">clipboard clear</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="caption">IMPORTANT ({{ board_count }})</div>
+    </a>
+
+    <!-- PILE 4: FILED -->
+    <a class="pile" href="/log">
+      <div class="pile-stage">
+        <div class="filed-tray">
+          <div class="f-line1">{{ filed_total }} records &middot; findable in seconds</div>
+          <div class="f-line2">{{ cleared_today }} filed today</div>
+        </div>
+      </div>
+      <div class="caption">FILED — done</div>
+    </a>
+
+  </div>
+</div>
+
+{% if stickies %}
+<div class="stickies">
+  {% for st in stickies %}
+    <div class="sticky-note hand">{{ st.text }} <a href="{{ st.url }}">{{ st.link }}</a></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+</body>
+</html>

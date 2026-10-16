@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+  <h1>&#9200; Catch Up</h1>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <a href="/catchup" class="btn btn-sm {{ 'btn-primary' if order == 'received' else 'btn-ghost' }}" title="Pay the stack the way it arrived — oldest mail first">&#128229; Order received</a>
+    <a href="/catchup?order=due" class="btn btn-sm {{ 'btn-primary' if order == 'due' else 'btn-ghost' }}" title="Group by urgency — most overdue first">&#9200; By due date</a>
+    <a href="/bills" class="btn btn-ghost btn-sm">All Bills</a>
+  </div>
+</div>
+<p class="subtitle">{% if order == 'received' %}Pay the stack the way it arrived &mdash; oldest mail first. Anything past its due date stays marked in red.{% else %}Most overdue first. Knock them out top to bottom.{% endif %}</p>
+
+{% macro days_label(b) %}
+  {% if b.days is none %}<span style="color:var(--mid);">&mdash;</span>
+  {% elif b.days < 0 %}<strong style="color:var(--red);">{{ -b.days }} day{{ 's' if -b.days != 1 else '' }} late</strong>
+  {% elif b.days == 0 %}<strong style="color:#B45309;">due today</strong>
+  {% else %}<span style="color:var(--mid);">in {{ b.days }} day{{ 's' if b.days != 1 else '' }}</span>{% endif %}
+{% endmacro %}
+
+{% macro row_actions(b) %}
+  <a href="/entry/{{ b.id }}/view?ctx=catchup{{ '&order=due' if order == 'due' else '' }}" class="btn btn-ghost btn-sm">View</a>
+  <form method="POST" action="/entry/{{ b.id }}/pay" style="display:inline;margin:0;"
+        onsubmit="return confirm('Mark {{ b.vendor }} {% if b.amount %}${{ '{:,.2f}'.format(b.amount) }}{% endif %} as paid?')">
+    <input type="hidden" name="paid_amount" value="{{ b.amount or '' }}">
+    <input type="hidden" name="paid_date" value="{{ today }}">
+    <button type="submit" class="btn btn-success btn-sm">&#10003; Paid</button>
+  </form>
+{% endmacro %}
+
+{% macro source_cell(b) %}
+  {% if (b.mail_type or 'Physical Mail') == 'Email' %}
+  <td data-sort="Email" style="white-space:nowrap;font-size:.82rem;" title="Arrived by email{% if b.email_from %} &mdash; {{ b.email_from }}{% endif %}">&#128231; Email</td>
+  {% else %}
+  <td data-sort="Mail" style="white-space:nowrap;font-size:.82rem;" title="Arrived by {{ (b.mail_type or 'physical mail')|lower }}">&#9993;&#65039; {{ 'Mail' if (b.mail_type or 'Physical Mail') == 'Physical Mail' else b.mail_type }}</td>
+  {% endif %}
+{% endmacro %}
+
+{# 2026-08-10 (Karen): the attention flag finally shows on the page she pays
+   from. The fields were already on every row (get_bills_by_due_date is
+   SELECT *) — this page just never rendered them. Hover tells you why, most
+   often "the vendor re-sent this bill". #}
+{% macro flag_chip(b) %}
+  {%- if b.important -%}<span style="color:var(--orange);cursor:help;font-size:1rem;" title="{{ b.important_reason or b.notice_summary or 'Flagged — needs a look' }}">&#9873;</span>&nbsp;{%- endif -%}
+{% endmacro %}
+
+{% macro due_cell(b) %}
+  <td data-sort="{{ b.due_date or '' }}" style="white-space:nowrap;font-size:.85rem;{% if b.days is not none and b.days < 0 %}color:var(--red);font-weight:bold;{% endif %}">{{ b.due_date or ('&mdash;'|safe) }}<br><span style="font-weight:normal;font-size:.82em;">{{ days_label(b) }}</span></td>
+{% endmacro %}
+
+{% if order == 'received' %}
+  {% set total_open = rows|length %}
+{% else %}
+  {% set total_open = buckets.overdue|length + buckets.today|length + buckets.week|length + buckets.later|length + buckets.nodate|length %}
+{% endif %}
+
+{% if total_open == 0 %}
+  <div class="card"><div class="card-body" style="text-align:center;padding:50px;color:#2E7D32;font-size:1.1rem;">&#10003; All caught up &mdash; no unpaid bills. Nice work!</div></div>
+{% else %}
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+  <button class="btn btn-success" data-kk="catchup-bulk-pay" onclick="bulkPay()">&#10003; Mark selected paid (<span id="paysel">0</span>)</button>
+  <a href="/bills/export.csv{{ '?order=due' if order == 'due' else '' }}" class="btn btn-ghost">&#11015; Export unpaid (CSV)</a>
+  <span class="subtitle" style="margin:0;font-size:.8rem;">Tick bills to pay several at once, or export the list for your bank.</span>
+</div>
+{% endif %}
+
+{% if order == 'received' %}
+{% if rows %}
+<div class="card">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>Oldest mail first &nbsp;<span style="opacity:.85;font-weight:normal;">({{ rows|length }})</span></span>
+    <span>${{ "{:,.2f}".format(total_amount) }}</span>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap"><table class="sortable">
+      <thead><tr><th style="width:28px;"></th><th>Received</th><th>Sitting</th><th>Source</th><th>Vendor</th><th>Prop.</th><th>Invoice #</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for b in rows %}
+      <tr style="{{ 'background:#FDE8E8;' if b.days is not none and b.days < 0 else '' }}">
+        <td onclick="event.stopPropagation()"><input type="checkbox" class="paychk" value="{{ b.id }}" onchange="updatePaySel()"></td>
+        <td style="white-space:nowrap;font-weight:700;">{{ b.date_received or ('&mdash;'|safe) }}</td>
+        <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{% if b.waiting_days is not none %}{{ b.waiting_days }} day{{ 's' if b.waiting_days != 1 else '' }}{% else %}&mdash;{% endif %}</td>
+        {{ source_cell(b) }}
+        <td>{{ flag_chip(b) }}<a href="/entry/{{ b.id }}/view?ctx=catchup" style="color:var(--blue);text-decoration:none;font-weight:600;">{{ b.vendor or ('&mdash;'|safe) }}</a></td>
+        <td style="font-size:.82rem;"><code>{{ b.property_code or ('&mdash;'|safe) }}</code></td>
+        <td style="font-size:.82rem;">{{ b.invoice_number or ('&mdash;'|safe) }}</td>
+        <td class="amount">{% if b.amount %}${{ "{:,.2f}".format(b.amount) }}{% else %}&mdash;{% endif %}</td>
+        {{ due_cell(b) }}
+        <td style="white-space:nowrap;font-size:.82rem;">{{ b.status or ('&mdash;'|safe) }}</td>
+        <td style="white-space:nowrap;">{{ row_actions(b) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody></table></div>
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+{% set sections = [
+  ('overdue', 'Overdue', 'var(--red)', '#FDE8E8'),
+  ('today',   'Due Today', '#B45309', '#FFF4E0'),
+  ('week',    'Due This Week', '#8A6D00', '#FFF8E1'),
+  ('later',   'Upcoming', 'var(--blue)', '#EAF2FB'),
+  ('nodate',  'No Due Date', 'var(--mid)', '#F2F2F2')
+] %}
+{% for key, label, color, bg in sections %}
+  {% set rows_ = buckets[key] %}
+  {% if rows_ %}
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-header" style="background:{{ color }};display:flex;justify-content:space-between;align-items:center;">
+      <span>{{ label }} &nbsp;<span style="opacity:.85;font-weight:normal;">({{ rows_|length }})</span></span>
+      <span>${{ "{:,.2f}".format(totals[key]) }}</span>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <div class="table-wrap"><table class="sortable">
+        <thead><tr><th style="width:28px;"></th><th>Received</th><th>Source</th><th>Vendor</th><th>Prop.</th><th>Invoice #</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for b in rows_ %}
+        <tr style="background:{{ bg if b.days is not none and b.days < 0 else '' }};">
+          <td onclick="event.stopPropagation()"><input type="checkbox" class="paychk" value="{{ b.id }}" onchange="updatePaySel()"></td>
+          <td style="white-space:nowrap;font-size:.82rem;color:var(--mid);">{{ b.date_received or ('&mdash;'|safe) }}</td>
+          {{ source_cell(b) }}
+          <td>{{ flag_chip(b) }}<a href="/entry/{{ b.id }}/view?ctx=catchup&order=due" style="color:var(--blue);text-decoration:none;font-weight:600;">{{ b.vendor or ('&mdash;'|safe) }}</a></td>
+          <td style="font-size:.82rem;"><code>{{ b.property_code or ('&mdash;'|safe) }}</code></td>
+          <td style="font-size:.82rem;">{{ b.invoice_number or ('&mdash;'|safe) }}</td>
+          <td class="amount">{% if b.amount %}${{ "{:,.2f}".format(b.amount) }}{% else %}&mdash;{% endif %}</td>
+          {{ due_cell(b) }}
+          <td style="white-space:nowrap;font-size:.82rem;">{{ b.status or ('&mdash;'|safe) }}</td>
+          <td style="white-space:nowrap;">{{ row_actions(b) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody></table></div>
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+{% endif %}
+
+<script>
+function updatePaySel(){var n=document.querySelectorAll('.paychk:checked').length;var el=document.getElementById('paysel');if(el)el.textContent=n;}
+function bulkPay(){
+  var ids=[].slice.call(document.querySelectorAll('.paychk:checked')).map(function(c){return c.value;});
+  if(!ids.length){alert('Tick at least one bill to mark paid.');return;}
+  if(!confirm('Mark '+ids.length+' bill'+(ids.length!==1?'s':'')+' as paid?'))return;
+  var body=new URLSearchParams(); ids.forEach(function(i){body.append('entry_ids',i);});
+  fetch('/bills/bulk_pay',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
+    .then(function(r){return r.json();}).then(function(data){
+      if(data && data.twin_warning) alert(data.twin_warning);
+      location.reload();
+    })
+    .catch(function(){alert('Could not mark paid. Try again.');});
+}
+</script>
+{% endblock %}

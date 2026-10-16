@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Karen's Questions{% endblock %}
+{% block content %}
+<style>
+  .kq-intro{background:var(--pale);border-left:4px solid var(--blue);padding:12px 16px;border-radius:6px;
+            margin-bottom:18px;color:var(--dark);font-size:.95rem;}
+  .kq-progress{font-size:.85rem;color:var(--mid);margin-left:10px;}
+  .kq-section{margin-bottom:22px;}
+  .kq-section .card-header{display:flex;align-items:baseline;gap:10px;}
+  .kq-sub{font-weight:normal;font-size:.8rem;opacity:.85;}
+  .kq-q{padding:14px 20px;border-bottom:1px solid #eee;}
+  .kq-q:last-child{border-bottom:none;}
+  .kq-text{margin-bottom:8px;line-height:1.45;}
+  .kq-num{color:var(--blue);font-weight:bold;margin-right:6px;}
+  .kq-opts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+  .kq-opt input{position:absolute;opacity:0;pointer-events:none;}
+  .kq-opt span{display:inline-block;padding:7px 16px;border:2px solid var(--light-blue);border-radius:20px;
+               cursor:pointer;font-size:.9rem;font-weight:bold;color:var(--navy);background:#fff;
+               transition:all .12s;user-select:none;}
+  .kq-opt span:hover{border-color:var(--blue);}
+  .kq-opt input:checked + span{background:var(--navy);border-color:var(--navy);color:#fff;}
+  .kq-rec{font-weight:normal;opacity:.8;font-size:.78em;}
+  .kq-opt.kq-opt-rec span{border-color:var(--green);}
+  .kq-notes{width:100%;border:1px solid #ccc;border-radius:6px;padding:8px 10px;font-size:.9rem;
+            font-family:inherit;min-height:38px;resize:vertical;}
+  .kq-notes::placeholder{color:#aaa;}
+  .kq-table{width:100%;border-collapse:collapse;font-size:.85rem;margin:0 0 4px;}
+  .kq-table th{background:var(--navy);color:#fff;padding:6px 10px;text-align:left;}
+  .kq-table td{padding:5px 10px;border-bottom:1px solid #eee;}
+  .kq-table td.was{font-weight:bold;color:var(--red);}
+  .kq-table td.now{font-weight:bold;color:var(--green);}
+  .kq-qform{margin:0;display:flex;flex-direction:column;gap:0;}
+  .kq-submit-row{display:flex;align-items:center;gap:10px;margin-top:8px;}
+  .kq-answered{font-size:.8rem;color:var(--mid);}
+</style>
+
+<h1>&#128203; Karen's Questions
+  <span class="kq-progress">{{ answered }} of {{ total }} answered</span></h1>
+
+{% if request.args.get('msg') %}
+<div class="alert alert-info">{{ request.args.get('msg') }}</div>
+{% endif %}
+
+<div class="kq-intro">
+  We double-checked all 13 years of your records &mdash; <strong>everything balances.</strong>
+  These last questions finish setting up the new books. Answer one at a time &mdash; pick an
+  answer, add a note wherever you like, and hit <strong>Submit</strong> on that question.
+  Once you submit it, it drops off this list, so what's left is only what's still open.
+  You can come back anytime; nothing in your files was changed.
+</div>
+
+{% if not questions %}
+<div class="card" style="padding:20px;">All caught up &mdash; nothing left to answer right now.</div>
+{% endif %}
+
+{% for skey, stitle, sintro in sections %}
+{% set section_questions = questions|selectattr('section', 'equalto', skey)|list %}
+{% if skey == 'C' or section_questions %}
+<div class="card kq-section">
+  <div class="card-header">{{ skey }}. {{ stitle }} <span class="kq-sub">{{ sintro }}</span></div>
+
+  {% if skey == 'C' %}
+  <div style="padding:12px 20px 0;">
+    <table class="kq-table">
+      <tr><th>#</th><th>Workbook (row)</th><th>Entry</th><th>Was written</th><th>Now reads</th></tr>
+      {% for wb, entry, was, now in date_fixes %}
+      <tr><td>{{ loop.index }}</td><td>{{ wb }}</td><td>{{ entry }}</td>
+          <td class="was">{{ was }}</td><td class="now">{{ now }}</td></tr>
+      {% endfor %}
+    </table>
+    <div style="font-size:.78rem;color:var(--mid);margin-bottom:6px;">
+      Corrected in the new system's copy only &mdash; your workbooks are untouched.</div>
+  </div>
+  {% endif %}
+
+  {% for q in section_questions %}
+  <div class="kq-q">
+    <form class="kq-qform" method="POST" action="/karen/save">
+      <input type="hidden" name="qid" value="{{ q.id }}">
+      <div class="kq-text"><span class="kq-num">{{ q.display_no }}.</span>{{ q.text }}</div>
+      {% if q.options %}
+      <div class="kq-opts">
+        {% for opt in q.options %}
+        <label class="kq-opt{{ ' kq-opt-rec' if opt.recommended else '' }}">
+          <input type="radio" name="a_{{ q.id }}" value="{{ opt.value }}">
+          <span>{{ opt.value }}{% if opt.recommended %} <span class="kq-rec">(recommended)</span>{% endif %}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <textarea class="kq-notes" name="n_{{ q.id }}" rows="1"
+                placeholder="{{ q.note_hint or 'Notes (optional)' }}"></textarea>
+      <div class="kq-submit-row">
+        <button type="submit" class="btn btn-primary">&#128190; Submit</button>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

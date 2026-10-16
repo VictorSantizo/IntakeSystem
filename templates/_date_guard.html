@@ -1,0 +1,94 @@
+{# Year-sanity guard (record #815, 2026-07-24): a degraded scan's misread year
+   ("JUN 1 2025" on a fresh 2026 document) sailed through review and became a
+   permanent record number plus a 2025 filing suggestion. When the received
+   date is far in the past or any amount in the future, or the due date is far
+   from today in either direction, a warning appears and the form refuses to
+   submit until "keep this date" is ticked. Thresholds mirror
+   _date_sanity_warnings in app.py — keep them in sync. #}
+
+{% macro date_guard_box() %}
+<div id="date-guard" class="form-group full" style="display:none;background:#FDE8E8;border-left:4px solid var(--red);border-radius:6px;padding:12px 14px;">
+  <div id="date-guard-msgs" style="color:var(--red);font-weight:bold;font-size:.9rem;line-height:1.5;"></div>
+  <div style="font-size:.8rem;color:#7A1F1F;margin-top:6px;">Record numbers and filing folders are built from these dates and never renumber — please check the date against the document.</div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.85rem;font-weight:600;color:#7A1F1F;cursor:pointer;">
+    <input type="checkbox" name="date_ok" id="date-ok" value="1" style="width:16px;height:16px;">
+    Keep this date &mdash; I checked it against the document
+  </label>
+</div>
+{% endmacro %}
+
+{% macro date_guard_script(received_id, due_id, check_on_load) %}
+<script>
+(function(){
+  var PAST_DAYS = 60, DUE_FUTURE_DAYS = 180, MS_DAY = 86400000;
+  var MONTHS = ['January','February','March','April','May','June','July',
+                'August','September','October','November','December'];
+  var recv = document.getElementById('{{ received_id }}');
+  var due  = document.getElementById('{{ due_id }}');
+  var box  = document.getElementById('date-guard');
+  var msgs = document.getElementById('date-guard-msgs');
+  var ok   = document.getElementById('date-ok');
+  // On the edit form the loaded values were already approved by a person once —
+  // only question a date someone just CHANGED to something out of range.
+  var initial = {recv: recv ? recv.value : '', due: due ? due.value : ''};
+  var checkOnLoad = {{ 'true' if check_on_load else 'false' }};
+
+  function parse(v){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
+    return m ? new Date(+m[1], +m[2]-1, +m[3]) : null;
+  }
+  function monthOf(d){ return MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+  function daysFromToday(d){
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((d - today) / MS_DAY);
+  }
+  function warningsFor(recvVal, dueVal){
+    var w = [], d = parse(recvVal), delta;
+    if (d){
+      delta = daysFromToday(d);
+      if (delta < -PAST_DAYS)
+        w.push('This reads as ' + monthOf(d) + ' — ' +
+               (delta <= -300 ? 'a year-old' : 'a months-old') +
+               ' received date on a fresh scan is usually a misread.');
+      else if (delta > 0)
+        w.push('Date received reads as ' + monthOf(d) +
+               " — that's in the future; mail can't be received after today.");
+    }
+    d = parse(dueVal);
+    if (d){
+      delta = daysFromToday(d);
+      if (delta < -PAST_DAYS)
+        w.push('Due date reads as ' + monthOf(d) + ' — ' +
+               (delta <= -300 ? 'a year-old' : 'a months-old') +
+               ' due date on a fresh scan usually means a misread year.');
+      else if (delta > DUE_FUTURE_DAYS)
+        w.push('Due date reads as ' + monthOf(d) +
+               ' — more than six months out usually means a misread year.');
+    }
+    return w;
+  }
+  function evaluate(fromChange){
+    if (!box || !ok) return;
+    var rv = recv ? recv.value : '', dv = due ? due.value : '';
+    var w = warningsFor(
+      (checkOnLoad || rv !== initial.recv) ? rv : '',
+      (checkOnLoad || dv !== initial.due) ? dv : '');
+    if (w.length){
+      msgs.innerHTML = w.map(function(t){ return '⚠️ ' + t; }).join('<br>');
+      box.style.display = '';
+      ok.required = true;                    // blocks submit until ticked
+      if (fromChange) ok.checked = false;    // a new date needs a fresh look
+      if (typeof window.kkDateGuardShown === 'function') window.kkDateGuardShown();
+    } else {
+      box.style.display = 'none';
+      ok.required = false;                   // never leave a hidden input required
+      ok.checked = false;
+    }
+  }
+  if (recv) recv.addEventListener('change', function(){ evaluate(true); });
+  if (due)  due.addEventListener('change', function(){ evaluate(true); });
+  evaluate(false);
+})();
+</script>
+{% endmacro %}

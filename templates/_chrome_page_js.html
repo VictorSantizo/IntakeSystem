@@ -1,0 +1,104 @@
+{# Per-page glue shared by BOTH looks (classic base.html and new/base.html).
+   Expects the surrounding chrome to provide: #nav-clock, #goto-box, and (for
+   live counts) .js-pending-badge spans; #theme-picker is optional (classic
+   /account only). styleReviewTile is defined by whichever dashboard template
+   renders — each look supplies its own implementation for its own markup,
+   same name and (count, urgent) signature. Extracted verbatim from base.html. #}
+<script>
+  function updateClock(){const now=new Date();document.getElementById('nav-clock').textContent=now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' '+now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
+  updateClock();setInterval(updateClock,30000);
+  // "/" from anywhere focuses the Go-to-record box (unless already typing somewhere).
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey)return;
+    var t=document.activeElement;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+    var g=document.getElementById('goto-box');
+    if(g){e.preventDefault();g.focus();g.select();}
+  });
+  // Click-to-copy on the record-number chip. The app is served over plain
+  // HTTP on the LAN, where navigator.clipboard doesn't exist — fall back to
+  // a hidden textarea + execCommand.
+  function copyRecNo(el){
+    var txt=(el.textContent||'').trim();
+    if(copyTextToClipboard(txt)){
+      el.classList.add('copied');setTimeout(function(){el.classList.remove('copied');},900);
+    }
+  }
+  // Theme switcher: persist per-person in localStorage; applied pre-paint in <head>.
+  function setTheme(v){
+    try{localStorage.setItem('klr-theme',v);}catch(e){}
+    if(v&&v!=='default') document.documentElement.setAttribute('data-theme',v);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  (function(){var t='default';try{t=localStorage.getItem('klr-theme')||'default';}catch(e){}var s=document.getElementById('theme-picker');if(s)s.value=t;})();
+  // Account menu (report #79): the <details> in the chrome opens on click by
+  // itself; this only gives it the closing manners every other app's account
+  // menu has — click anywhere else, or press Escape.
+  document.addEventListener('click',function(e){
+    document.querySelectorAll('details.usermenu[open]').forEach(function(d){
+      if(!d.contains(e.target)) d.removeAttribute('open');
+    });
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Escape')return;
+    document.querySelectorAll('details.usermenu[open]').forEach(function(d){d.removeAttribute('open');});
+  });
+  // Copy-to-clipboard for any text (file paths, record numbers). The app is
+  // served over plain HTTP on the LAN, where navigator.clipboard does not
+  // exist at all — without the hidden-textarea fallback the Copy path button
+  // did nothing you could paste into File Explorer (report #92). Returns true
+  // when the text really reached the clipboard.
+  function copyTextToClipboard(text){
+    if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text);return true;}
+    var ta=document.createElement('textarea');ta.value=text;
+    ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.top='0';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,text.length);
+    var ok=false;try{ok=document.execCommand('copy');}catch(e){ok=false;}
+    document.body.removeChild(ta);
+    return ok;
+  }
+  window.copyTextToClipboard=copyTextToClipboard;
+  // Every "Copy path" button in the app goes through this (report #22 bounce,
+  // Joshua: "the button name should change ... after it attaches to the
+  // clipboard"). Four pages had each invented their own label swap, and one of
+  // them said nothing at all when the copy failed — a button that looks
+  // identical before and after the click reads as broken. So: one behaviour,
+  // the button says "Path Copied", and a refused clipboard hands the path over
+  // in a box you can Ctrl+C instead of failing quietly. The original label
+  // lives in a data attribute, so clicking twice inside the restore window
+  // can't strand the button reading "Path Copied" forever.
+  function copyPathButton(btn, text){
+    if(!btn.dataset.copyLabel) btn.dataset.copyLabel=btn.textContent;
+    var ok=copyTextToClipboard(text);
+    btn.textContent = ok ? 'Path Copied' : 'Copy it by hand';
+    if(!ok) window.prompt('Copy the file path:', text);
+    clearTimeout(btn._copyTimer);
+    btn._copyTimer=setTimeout(function(){btn.textContent=btn.dataset.copyLabel;},1800);
+    return ok;
+  }
+  window.copyPathButton=copyPathButton;
+  // Any element carrying data-copy-path copies it. THE reason paths are never
+  // written into an inline onclick again (report #22 bounce, the fault behind
+  // "Copy Path still not working"): Jinja's |tojson escapes < > & and the
+  // single quote, but NOT the double quote — so a path piped through tojson
+  // as the argument of a double-quoted onclick=" ... " attribute
+  // renders as onclick="copyDocPath(this, " and the attribute ENDS at the
+  // JSON string's opening quote. The handler was a syntax error, the click did
+  // nothing at all, and the button looked identical before and after. A plain
+  // data attribute goes through normal autoescaping, which does escape quotes.
+  document.addEventListener('click',function(e){
+    var b=e.target&&e.target.closest?e.target.closest('[data-copy-path]'):null;
+    if(!b)return;
+    e.preventDefault();
+    copyPathButton(b,b.getAttribute('data-copy-path'));
+  });
+  // One poller drives both the nav badge and (when present) the dashboard's
+  // Needs Review tile — there used to be two independent timers hitting this
+  // same endpoint on the dashboard; harmless, but pure waste.
+  setInterval(()=>{fetch('/api/pending_count').then(r=>{if(r.status===401){location.href='/login?timed_out=1';return null;}return r.json();}).then(d=>{
+    if(!d)return;
+    const b=document.querySelectorAll('.js-pending-badge');
+    b.forEach(x=>{if(d.count>0){x.textContent=d.count;x.style.display='';}else{x.style.display='none';}});
+    if(window.styleReviewTile) window.styleReviewTile(d.count, d.urgent||0);
+  });},10000);
+</script>
